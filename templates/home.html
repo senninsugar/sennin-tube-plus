@@ -5,10 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
     <meta name="robots" content="noindex,nofollow">
-    <title>仙人Tube</title>
+    <title>東京NOW！tube</title>
     <link rel="icon" href="/img/logo/favicon.ico">
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="/statics/css/minecraft-theme.css">
 
 <style>
     /* --- 基本設定 --- */
@@ -18,9 +19,11 @@
         --bg-light: #f8f9fa;
         --text-dark: #212529;
         --gray-logo: #495057;
-        --glass-bg: rgba(255, 255, 255, 0.75);
-        --card-bg: #ffffff;
-        --border-color: rgba(0, 0, 0, 0.06);
+        --glass-bg: rgba(8, 8, 8, 0.72);
+        --card-bg: rgba(10, 10, 10, 0.82);
+        --border-color: rgba(255, 255, 255, 0.14);
+        --panel-text: #f7f7f2;
+        --panel-muted: rgba(255, 255, 255, 0.74);
     }
 
     html,
@@ -53,12 +56,13 @@
         border-bottom: 1px solid var(--border-color);
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         box-sizing: border-box;
+        color: var(--panel-text);
     }
 
     #top-bar.scrolled {
         padding: 12px 40px;
-        background-color: rgba(255, 255, 255, 0.9);
-        box-shadow: 0 4px 30px rgba(0, 0, 0, 0.03);
+        background-color: rgba(8, 8, 8, 0.88);
+        box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
     }
 
     #top-nav {
@@ -70,18 +74,18 @@
     /* ボタンデザインのモダン化 */
     #top-nav a {
         position: relative;
-        color: var(--text-dark);
+        color: var(--panel-text);
         text-decoration: none;
         font-size: 14px;
         font-weight: 500;
         padding: 8px 20px;
         border-radius: 50px;
         transition: all 0.2s ease;
-        background: rgba(0, 0, 0, 0.04);
+        background: rgba(255, 255, 255, 0.08);
         cursor: pointer;
         display: flex;
         align-items: center;
-        border: 1px solid transparent;
+        border: 1px solid rgba(255, 255, 255, 0.12);
     }
 
     #top-nav a i {
@@ -104,15 +108,16 @@
         right: -320px;
         width: 320px;
         height: 100%;
-        background: rgba(255, 255, 255, 0.85);
+        background: rgba(10, 10, 10, 0.86);
         backdrop-filter: blur(25px) saturate(190%);
         -webkit-backdrop-filter: blur(25px) saturate(190%);
         z-index: 2001;
-        box-shadow: -10px 0 40px rgba(0,0,0,0.05);
+        box-shadow: -10px 0 40px rgba(0,0,0,0.2);
         transition: right 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
         padding: 40px 30px;
         box-sizing: border-box;
-        border-left: 1px solid rgba(0, 0, 0, 0.05);
+        border-left: 1px solid rgba(255, 255, 255, 0.12);
+        color: var(--panel-text);
     }
 
     #settings-panel.open, #menu-panel.open {
@@ -161,12 +166,12 @@
         display: flex;
         align-items: center;
         padding: 14px 20px;
-        color: var(--text-dark);
+        color: var(--panel-text);
         text-decoration: none;
         border-radius: 14px;
         transition: all 0.25s ease;
         font-weight: 500;
-        background: rgba(0, 0, 0, 0.02);
+        background: rgba(255, 255, 255, 0.07);
         font-size: 15px;
     }
 
@@ -186,8 +191,9 @@
         align-items: center;
         justify-content: center;
         border-radius: 10px;
-        background: rgba(0, 0, 0, 0.05);
+        background: rgba(255, 255, 255, 0.1);
         transition: all 0.25s ease;
+        color: var(--panel-text);
     }
 
     .menu-list a:hover i {
@@ -204,14 +210,35 @@
         min-height: 100vh;
         box-sizing: border-box;
         padding-top: 60px;
+        position: relative;
+    }
+
+    #contents::before {
+        content: '';
+        position: absolute;
+        inset: 70px 0 0;
+        background:
+            linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.08) 100%),
+            repeating-linear-gradient(90deg, transparent 0 32px, rgba(92, 62, 31, 0.28) 32px 40px),
+            repeating-linear-gradient(0deg, transparent 0 18px, rgba(94, 174, 63, 0.24) 18px 24px);
+        border-radius: 24px;
+        z-index: -1;
+        transform: perspective(700px) rotateX(8deg);
+        opacity: 0.95;
+        border: 4px solid rgba(46, 31, 16, 0.8);
     }
 
     #search-widget {
         width: 100%;
-        max-width: 720px;
+        max-width: 760px;
         text-align: center;
-        padding: 0 24px;
+        padding: 34px 34px 42px;
         animation: fadeInUp 0.8s cubic-bezier(0.165, 0.84, 0.44, 1);
+        background: linear-gradient(180deg, rgba(255,255,255,0.16) 0%, rgba(0,0,0,0.22) 100%);
+        border: 4px solid var(--mc-border);
+        border-radius: 24px;
+        box-shadow: 0 14px 0 rgba(0,0,0,0.25);
+        backdrop-filter: blur(6px);
     }
 
     @keyframes fadeInUp {
@@ -220,13 +247,13 @@
     }
 
     #logo > h1 {
-        font-size: clamp(2.8em, 7vw, 4.2em);
+        font-size: clamp(2.2em, 5vw, 3.3em);
         font-weight: 700;
-        margin-bottom: 35px;
-        color: var(--gray-logo);
+        margin-bottom: 28px;
+        color: var(--mc-text);
         cursor: pointer;
         transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.1);
-        letter-spacing: -1.5px;
+        letter-spacing: 0.08em;
         user-select: none;
     }
 
@@ -248,23 +275,50 @@
         width: 100%;
         display: flex;
         justify-content: center;
+        align-items: center;
+        gap: 12px;
         margin-bottom: 30px;
     }
 
     .search-container {
         position: relative;
         width: 100%;
+        flex: 1;
+    }
+
+    .sub-link-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 52px;
+        height: 52px;
+        border-radius: 16px;
+        background: rgba(8, 8, 8, 0.78);
+        color: var(--panel-text);
+        border: 3px solid rgba(255,255,255,0.12);
+        box-shadow: 0 8px 0 rgba(0,0,0,0.24);
+        text-decoration: none;
+        transition: all 0.2s ease;
+        flex-shrink: 0;
+    }
+
+    .sub-link-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 10px 0 rgba(0,0,0,0.28);
+        color: #fff;
+        background: var(--primary-color);
     }
 
     .searchbar input[type="search"] {
         width: 100%;
         padding: 20px 30px 20px 60px;
-        border: 1px solid rgba(0, 0, 0, 0.08);
-        border-radius: 50px;
+        border: 3px solid rgba(255,255,255,0.12);
+        border-radius: 16px;
         outline: none;
-        font-size: 17px;
-        background-color: var(--card-bg);
-        box-shadow: 0 10px 35px rgba(0, 0, 0, 0.05);
+        font-size: 18px;
+        background-color: rgba(8, 8, 8, 0.78);
+        color: var(--panel-text);
+        box-shadow: 0 8px 0 rgba(0,0,0,0.24);
         transition: all 0.3s cubic-bezier(0.165, 0.84, 0.44, 1);
         box-sizing: border-box;
     }
@@ -274,15 +328,15 @@
         left: 24px;
         top: 50%;
         transform: translateY(-50%);
-        color: #adb5bd;
+        color: var(--panel-muted);
         font-size: 18px;
         transition: color 0.3s ease;
         pointer-events: none;
     }
 
     .searchbar input[type="search"]:focus {
-        border-color: rgba(0, 123, 255, 0.5);
-        box-shadow: 0 15px 40px rgba(0, 123, 255, 0.12);
+        border-color: var(--mc-accent);
+        box-shadow: 0 10px 0 rgba(0,0,0,0.2);
         transform: translateY(-1px);
     }
 
@@ -296,12 +350,13 @@
         top: 95px;
         right: 24px;
         width: 320px;
-        background: #fff;
+        background: rgba(10, 10, 10, 0.84);
+        color: var(--panel-text);
         border-radius: 16px;
         padding: 18px;
-        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08);
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
         z-index: 2000;
-        border-left: 4px solid var(--primary-color);
+        border-left: 4px solid rgba(255, 255, 255, 0.55);
         animation: slideInDownRight 0.6s cubic-bezier(0.165, 0.84, 0.44, 1);
         box-sizing: border-box;
         transition: transform 0.2s ease, opacity 0.2s ease;
@@ -337,7 +392,7 @@
     .close-info {
         background: none;
         border: none;
-        color: #adb5bd;
+        color: var(--panel-muted);
         cursor: pointer;
         font-size: 15px;
         transition: color 0.2s;
@@ -354,7 +409,7 @@
     #infoContent {
         font-size: 14px;
         line-height: 1.6;
-        color: #495057;
+        color: rgba(255, 255, 255, 0.86);
         min-height: 44px;
         display: flex;
         align-items: center;
@@ -376,15 +431,17 @@
             background-color: rgba(15, 15, 15, 0.95);
         }
         #top-nav a {
-            color: var(--text-dark);
-            background: rgba(255, 255, 255, 0.06);
+            color: var(--panel-text);
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255,255,255,0.12);
         }
         #top-nav a:hover {
             background: var(--primary-color);
             color: #fff;
         }
         .searchbar input[type="search"] {
-            border-color: transparent;
+            background-color: rgba(8, 8, 8, 0.82);
+            border-color: rgba(255,255,255,0.12);
             box-shadow: 0 10px 35px rgba(0, 0, 0, 0.3);
         }
         .searchbar input[type="search"]:focus {
@@ -392,17 +449,17 @@
             box-shadow: 0 15px 40px rgba(0, 123, 255, 0.2);
         }
         .latest-info {
-            background: #1f1f1f;
+            background: rgba(10, 10, 10, 0.88);
             box-shadow: 0 15px 45px rgba(0, 0, 0, 0.4);
         }
-        #infoContent { color: #ced4da; }
+        #infoContent { color: rgba(255,255,255,0.86); }
         #settings-panel, #menu-panel { 
-            background: rgba(30, 30, 30, 0.85);
-            border-left: 1px solid rgba(255,255,255,0.05); 
+            background: rgba(10, 10, 10, 0.9);
+            border-left: 1px solid rgba(255,255,255,0.12); 
         }
-        .settings-header { border-bottom-color: rgba(255,255,255,0.1); }
-        .menu-list a { background: rgba(255, 255, 255, 0.04); }
-        .menu-list i { background: rgba(255, 255, 255, 0.06); }
+        .settings-header { border-bottom-color: rgba(255,255,255,0.12); }
+        .menu-list a { background: rgba(255, 255, 255, 0.07); }
+        .menu-list i { background: rgba(255, 255, 255, 0.1); }
         #logo > h1:hover { color: #fff; }
     }
 
@@ -623,12 +680,10 @@
     </div>
     <div class="settings-content">
         <ul class="menu-list">
-            <li><a href="/games"><i class="fas fa-rocket"></i> ゲーム</a></li>
             <li><a href="/subscriptions"><i class="fas fa-heart"></i> 登録済みチャンネル</a></li>
             <li><a href="/history"><i class="fas fa-compass"></i> 履歴</a></li>
             <li><a href="/tools"><i class="fas fa-wand-magic-sparkles"></i> tools</a></li>
             <li><a href="/status"><i class="fas fa-chart-line"></i> 稼働状況</a></li>
-            <li><a href="/bbs"><i class="far fa-comments"></i> 掲示板</a></li>
         </ul>
     </div>
 </div>
@@ -647,6 +702,15 @@
             <p style="font-size:14px; margin-bottom:10px;">通知設定</p>
             <small>ステータス情報の表示/非表示</small>
         </div>
+        <div class="settings-option">
+            <p style="font-size:14px; margin-bottom:10px;">再生設定</p>
+            <small>自動再生・音量・画質の既定値を管理</small>
+            <div style="margin-top:10px; display:flex; flex-direction:column; gap:8px;">
+                <label style="font-size:12px; display:flex; align-items:center; gap:8px;"><input type="checkbox" id="autoPlayPref"> 自動再生を有効化</label>
+                <label style="font-size:12px; display:flex; align-items:center; gap:8px;">音量 <input type="range" id="volumePref" min="0" max="100" value="100" style="width:100px;"></label>
+                <label style="font-size:12px; display:flex; align-items:center; gap:8px;">既定画質 <select id="qualityPref"><option value="auto">自動</option><option value="high">高画質</option><option value="low">低画質</option></select></label>
+            </div>
+        </div>
         <div class="settings-option" style="margin-top:40px;">
             <p style="font-size:12px; opacity:0.6;">Version 1.2.0-plus</p>
         </div>
@@ -658,14 +722,14 @@
         <h3><i class="fas fa-bell"></i> Status</h3>
         <button class="close-info" title="閉じる"><i class="fas fa-times"></i></button>
     </div>
-    <div id="infoContent">仙人Tubeへようこそ</div>
+    <div id="infoContent">東京NOW！tubeへようこそ</div>
 </div>
 
 <script>
     document.addEventListener("DOMContentLoaded", function () {
         const infoContent = document.getElementById("infoContent");
         const messages = [
-            "仙人tubeを一から改良しました",
+            "Minecraft風にしてみました！！",
             "エラーの時は時間をおこう",
             "再生できないときはリロードしてね"
         ];
@@ -680,13 +744,33 @@
                 }, 500);
             }
         }, 6000);
+
+        const autoPlayPref = document.getElementById('autoPlayPref');
+        const volumePref = document.getElementById('volumePref');
+        const qualityPref = document.getElementById('qualityPref');
+
+        const savedPrefs = JSON.parse(localStorage.getItem('playerPrefs') || '{}');
+        autoPlayPref.checked = savedPrefs.autoPlay === true;
+        volumePref.value = savedPrefs.volume ?? 100;
+        qualityPref.value = savedPrefs.quality || 'auto';
+
+        [autoPlayPref, volumePref, qualityPref].forEach(el => {
+            el.addEventListener('change', () => {
+                const prefs = {
+                    autoPlay: autoPlayPref.checked,
+                    volume: Number(volumePref.value),
+                    quality: qualityPref.value
+                };
+                localStorage.setItem('playerPrefs', JSON.stringify(prefs));
+            });
+        });
     });
 </script>
 
 <div id="contents">
     <div id="search-widget">
         <div id="logo">
-            <h1 onclick="location.replace('/')">仙人Tube<sup>+</sup></h1>
+            <h1 onclick="location.replace('/')">東京NOW！tube<sup>+</sup></h1>
         </div>
         <div class="searchbar">
             <form action="/search" method="get" class="search-container">
@@ -694,6 +778,9 @@
                        autocomplete="off" spellcheck="false" autofocus>
                 <i class="fas fa-search"></i>
             </form>
+            <a href="/subscriptions" class="sub-link-btn" title="登録チャンネル一覧" aria-label="登録チャンネル一覧">
+                <i class="fas fa-heart"></i>
+            </a>
         </div>
     </div>
 </div>

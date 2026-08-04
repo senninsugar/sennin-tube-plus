@@ -3,9 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ video_title }} - 仙人Tube+</title>
+    <title>{{ video_title }} - 東京NOW！tube+</title>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="/statics/css/minecraft-theme.css">
     <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
     <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
@@ -16,9 +17,11 @@
             --bg-light: #fdfdfd;
             --text-dark: #333333;
             --gray-logo: #555555;
-            --glass-bg: rgba(255, 255, 255, 0.85);
-            --card-bg: #ffffff;
-            --border-color: #e5e5e5;
+            --glass-bg: rgba(8, 8, 8, 0.72);
+            --card-bg: rgba(10, 10, 10, 0.82);
+            --border-color: rgba(255, 255, 255, 0.14);
+            --panel-text: #f7f7f2;
+            --panel-muted: rgba(255, 255, 255, 0.74);
         }
         @media (prefers-color-scheme: dark) {
             :root {
@@ -119,8 +122,9 @@
         }
         @keyframes spin { to { transform: rotate(360deg); } }
         .video-details, .description-card, .comment-section {
-            background: var(--card-bg); border-radius: 20px; padding: 25px; margin-top: 20px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            background: var(--card-bg); color: var(--panel-text); border-radius: 20px; padding: 25px; margin-top: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.18);
+            border: 1px solid var(--border-color);
         }
         .video-title-watch { font-size: 1.3rem; font-weight: 700; margin: 0 0 15px; line-height: 1.4; }
         .quality-selector { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
@@ -161,36 +165,43 @@
         .channel-info img { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; }
         .channel-name { font-weight: 700; font-size: 1.1rem; }
         .sub-count { font-size: 0.8rem; color: #888; }
-        .description-box { font-size: 0.95rem; line-height: 1.8; color: var(--text-dark); }
+        .description-box { font-size: 0.95rem; line-height: 1.8; color: var(--panel-text); }
         .comment-section h3 { margin-top: 0; margin-bottom: 20px; }
         .comment-item { 
             display: flex; gap: 15px; margin-bottom: 15px; 
-            background: rgba(0,0,0,0.02); padding: 15px; border-radius: 15px;
+            background: rgba(255,255,255,0.05); padding: 15px; border-radius: 15px;
             border: 1px solid var(--border-color);
+            color: var(--panel-text);
         }
         @media (prefers-color-scheme: dark) {
-            .comment-item { background: rgba(255,255,255,0.03); }
+            .comment-item { background: rgba(255,255,255,0.04); }
         }
         .comment-item img { width: 40px; height: 40px; border-radius: 50%; }
         .comment-author { font-weight: 700; font-size: 0.9rem; margin-bottom: 5px; }
         .comment-text { font-size: 0.9rem; line-height: 1.5; }
         .recommend-section { display: flex; flex-direction: column; gap: 15px; }
         .recommend-card {
-            display: flex; gap: 12px; text-decoration: none; color: inherit;
+            display: flex; gap: 12px; text-decoration: none; color: var(--panel-text);
             transition: transform 0.2s;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 10px;
+            box-shadow: 0 8px 22px rgba(0,0,0,0.16);
         }
         .recommend-card:hover { transform: translateX(5px); }
         .recommend-thumb { width: 160px; aspect-ratio: 16/9; border-radius: 12px; object-fit: cover; flex-shrink: 0; }
         .recommend-title { font-size: 0.9rem; font-weight: 700; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-        .recommend-meta { font-size: 0.75rem; color: #888; margin-top: 5px; }
+        .recommend-meta { font-size: 0.75rem; color: var(--panel-muted); margin-top: 5px; }
         .info-card {
-            background: var(--card-bg); border-radius: 20px; padding: 25px; margin-top: 25px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            background: var(--card-bg); color: var(--panel-text); border-radius: 20px; padding: 25px; margin-top: 25px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.18);
+            border: 1px solid var(--border-color);
         }
         .info-card h3 { margin: 0 0 15px; font-size: 1.1rem; }
         .info-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .info-btn {
-            background: rgba(0,0,0,0.05); color: var(--text-dark); border: none; padding: 12px;
+            background: rgba(255,255,255,0.08); color: var(--panel-text); border: 1px solid rgba(255,255,255,0.12); padding: 12px;
             border-radius: 10px; cursor: pointer; font-size: 0.85rem; font-weight: 700;
             display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s;
             text-decoration: none;
@@ -259,7 +270,7 @@
 </head>
 <body>
     <header id="top-bar">
-        <div class="logo-small" onclick="location.href='/'"><h2>仙人Tube<sup>+</sup></h2></div>
+        <div class="logo-small" onclick="location.href='/'"><h2>東京NOW！tube<sup>+</sup></h2></div>
         <form action="/search" method="get" class="search-container">
             <i class="fas fa-search"></i>
             <input id="searchbox" type="search" name="q" placeholder="動画を検索..." autocomplete="off">
@@ -356,13 +367,16 @@
                     </div>
                 </div>
 
-                <a href="/channel/{{ author_id }}" class="channel-info">
-                    <img src="{{ author_icon }}" alt="icon">
-                    <div>
-                        <div class="channel-name">{{ author }}</div>
-                        <div class="sub-count">登録者数 {{ subscribers_count }}</div>
-                    </div>
-                </a>
+                <div style="display:flex; align-items:center; gap:10px; margin-top:12px; flex-wrap:wrap;">
+                    <a href="/channel/{{ author_id }}" class="channel-info" style="margin-top:0; flex:1; min-width:220px;">
+                        <img src="{{ author_icon }}" alt="icon">
+                        <div>
+                            <div class="channel-name">{{ author }}</div>
+                            <div class="sub-count">登録者数 {{ subscribers_count }}</div>
+                        </div>
+                    </a>
+                    <button id="watch-subscribe-btn" class="quality-btn" onclick="toggleWatchSubscription('{{ author_id }}')" style="padding:8px 12px;">チャンネル登録</button>
+                </div>
             </div>
 
             <div class="description-card">
@@ -418,7 +432,43 @@
         const selectTrigger = selectWrapper.querySelector('.custom-select-trigger');
         const options = selectWrapper.querySelectorAll('.custom-option');
         const iframeContainer = document.getElementById('iframe-container');
+        const watchSubscribeBtn = document.getElementById('watch-subscribe-btn');
         let hls = null;
+
+        function toggleWatchSubscription(ucid) {
+            let subs = JSON.parse(localStorage.getItem('subscribed_channels') || '[]');
+            if (subs.includes(ucid)) {
+                subs = subs.filter(id => id !== ucid);
+                watchSubscribeBtn.innerText = 'チャンネル登録';
+            } else {
+                subs.push(ucid);
+                watchSubscribeBtn.innerText = '登録済み';
+            }
+            localStorage.setItem('subscribed_channels', JSON.stringify(subs));
+        }
+
+        function applySavedPlayerPrefs() {
+            const prefs = JSON.parse(localStorage.getItem('playerPrefs') || '{}');
+            if (prefs.autoPlay === true) {
+                video.autoplay = true;
+            } else {
+                video.autoplay = false;
+            }
+            if (typeof prefs.volume === 'number') {
+                video.volume = Math.max(0, Math.min(1, prefs.volume / 100));
+            }
+            if (prefs.quality === 'high') {
+                const highOption = Array.from(options).find(o => o.innerText.includes('720') || o.innerText.includes('1080'));
+                if (highOption) {
+                    highOption.click();
+                }
+            } else if (prefs.quality === 'low') {
+                const lowOption = Array.from(options).find(o => o.innerText.includes('360') || o.innerText.includes('240'));
+                if (lowOption) {
+                    lowOption.click();
+                }
+            }
+        }
 
         function toggleControlMenu() {
             const menu = document.getElementById('ctrlMenu');
@@ -682,6 +732,15 @@
             const id = "{{ videoid }}";
             navigator.clipboard.writeText(id).then(() => { showNotify("動画IDをコピーしました"); });
         }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const ucid = '{{ author_id }}';
+            const subs = JSON.parse(localStorage.getItem('subscribed_channels') || '[]');
+            if (watchSubscribeBtn && subs.includes(ucid)) {
+                watchSubscribeBtn.innerText = '登録済み';
+            }
+            applySavedPlayerPrefs();
+        });
     </script>
 </body>
 </html>

@@ -1,5 +1,6 @@
+import os
 from fastapi import FastAPI, Request, Query
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 import httpx
@@ -8,7 +9,13 @@ import json
 import random
 from datetime import datetime
 
-app = FastAPI()
+app = FastAPI(title="TokyoNOW!tube")
+
+app.mount("/statics", StaticFiles(directory="statics"), name="statics")
+
+@app.get("/healthz")
+async def healthz():
+    return JSONResponse({"status": "ok"})
 
 templates = Jinja2Templates(directory="templates")
 templates.env.add_extension('jinja2.ext.do')
@@ -27,7 +34,24 @@ INVIDIOUS_INSTANCES = [
 ]
 
 limits = httpx.Limits(max_connections=300, max_keepalive_connections=100)
-client_session = httpx.AsyncClient(timeout=10.0, limits=limits, follow_redirects=True)
+client_session = None
+
+
+@app.on_event("startup")
+async def startup_event():
+    global client_session
+    if client_session is None:
+        client_session = httpx.AsyncClient(timeout=10.0, limits=limits, follow_redirects=True)
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    global client_session
+    try:
+        if client_session is not None:
+            await client_session.aclose()
+    finally:
+        client_session = None
 
 async def fetch_invidious(endpoint: str, params: dict = None, force_instance: str = None):
     if force_instance:
@@ -267,6 +291,34 @@ async def watch(request: Request, v: str = Query(...), force_instance: str = Que
     except Exception:
         return templates.TemplateResponse("apiallerror.html", {"request": request, "instances": INVIDIOUS_INSTANCES})
 
+@app.get("/api/subscriptions")
+async def subscriptions_api(request: Request, ids: str = Query(...)):
+    ucids = [ucid.strip() for ucid in ids.split(",") if ucid and ucid.strip()]
+    if not ucids:
+        return JSONResponse({"channels": []})
+
+    async def fetch_channel(ucid: str):
+        try:
+            data = await fetch_invidious(f"/channels/{ucid}")
+            author_thumbs = data.get("authorThumbnails", [])
+            icon = author_thumbs[-1]["url"] if author_thumbs else ""
+            return {
+                "ucid": ucid,
+                "name": data.get("author") or ucid,
+                "icon": icon,
+                "sub_count": data.get("subCountText", "非公開"),
+            }
+        except Exception:
+            return {
+                "ucid": ucid,
+                "name": ucid,
+                "icon": "",
+                "sub_count": "非公開",
+            }
+
+    channels = await asyncio.gather(*(fetch_channel(ucid) for ucid in ucids))
+    return JSONResponse({"channels": channels})
+
 @app.get("/history", response_class=HTMLResponse)
 async def history_page(request: Request):
     try:
@@ -402,22 +454,6 @@ async def proxy_thumb(v: str):
 async def thumbnail(v: str):
     return await proxy_thumb(v)
 
-@app.get("/games", response_class=HTMLResponse)
-async def read_games(request: Request):
-    return templates.TemplateResponse("games.html", {"request": request})
-
-@app.get("/block.html", response_class=HTMLResponse)
-async def read_block(request: Request):
-    return templates.TemplateResponse("block.html", {"request": request})
-
-@app.get("/tumu.html", response_class=HTMLResponse)
-async def read_tumu(request: Request):
-    return templates.TemplateResponse("tumu.html", {"request": request})
-
-@app.get("/2048.html", response_class=HTMLResponse)
-async def read_2048(request: Request):
-    return templates.TemplateResponse("2048.html", {"request": request})
-
 @app.get("/status", response_class=HTMLResponse)
 async def read_status(request: Request):
     async def check_instance(instance):
@@ -445,14 +481,10 @@ async def read_status(request: Request):
 async def subscriptions_page(request: Request):
     return templates.TemplateResponse("subscriptions.html", {"request": request})
 
-@app.get("/bbs", response_class=HTMLResponse)
-async def bbs_page(request: Request):
-    return templates.TemplateResponse("bbs.html", {"request": request})
-
-@app.get("/ytdl", response_class=HTMLResponse)
-async def ytdl_page(request: Request):
-    return templates.TemplateResponse("bbs.html", {"request": request})
-
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(
+        app,
+        host=os.environ.get("HOST", "0.0.0.0"),
+        port=int(os.environ.get("PORT", 1024))
+    )

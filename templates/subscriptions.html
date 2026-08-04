@@ -3,9 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>購読マネージャー - 仙人Tube+</title>
+    <title>購読マネージャー - 東京NOW！tube+</title>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="/statics/css/minecraft-theme.css">
     <style>
         :root {
             --primary-color: #007bff;
@@ -131,6 +132,20 @@
             color: var(--primary-color);
             flex-shrink: 0;
             box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .channel-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        .channel-avatar-link {
+            color: inherit;
+            text-decoration: none;
+            display: inline-flex;
         }
 
         .card-content {
@@ -225,7 +240,7 @@
 <body>
     <header id="top-bar">
         <a href="/" class="logo-small">
-            <h2>仙人Tube<sup>+</sup></h2>
+            <h2>東京NOW！tube<sup>+</sup></h2>
         </a>
         <div class="stats-badge" id="sub-count-badge">0 購読</div>
     </header>
@@ -247,7 +262,7 @@
     </main>
 
     <script>
-        function loadSubscriptions() {
+        async function loadSubscriptions() {
             const grid = document.getElementById('sub-grid');
             const emptyState = document.getElementById('empty-state');
             const badge = document.getElementById('sub-count-badge');
@@ -264,34 +279,63 @@
             emptyState.style.display = 'none';
             grid.innerHTML = '';
 
-            subs.forEach((ucid, index) => {
-                const card = document.createElement('div');
-                card.className = 'sub-card';
-                card.style.animationDelay = `${index * 0.05}s`;
-                
-                card.innerHTML = `
-                    <div class="channel-avatar">
-                        <i class="fas fa-user-ninja"></i>
-                    </div>
-                    <div class="card-content">
-                        <div class="channel-name">Channel ID: ${ucid.substring(0, 10)}...</div>
-                        <div class="channel-id">${ucid}</div>
-                        <div class="btn-group">
-                            <a href="/channel/${ucid}" class="action-btn btn-visit">移動</a>
-                            <div class="action-btn btn-unsub" onclick="unsubscribe('${ucid}')">解除</div>
+            try {
+                const response = await fetch(`/api/subscriptions?ids=${encodeURIComponent(subs.join(','))}`);
+                const data = await response.json();
+                const channelMap = new Map((data.channels || []).map(ch => [ch.ucid, ch]));
+
+                subs.forEach((ucid, index) => {
+                    const channel = channelMap.get(ucid) || { name: ucid, icon: '', sub_count: '非公開' };
+                    const card = document.createElement('div');
+                    card.className = 'sub-card';
+                    card.style.animationDelay = `${index * 0.05}s`;
+
+                    card.innerHTML = `
+                        <a href="/channel/${ucid}" class="channel-avatar-link">
+                            <div class="channel-avatar">
+                                ${channel.icon ? `<img src="${channel.icon}" alt="${channel.name}">` : '<i class="fas fa-user-ninja"></i>'}
+                            </div>
+                        </a>
+                        <div class="card-content">
+                            <div class="channel-name">${channel.name}</div>
+                            <div class="channel-id">${ucid}</div>
+                            <div class="channel-id">${channel.sub_count}</div>
+                            <div class="btn-group">
+                                <a href="/channel/${ucid}" class="action-btn btn-visit">移動</a>
+                                <div class="action-btn btn-unsub" onclick="event.stopPropagation(); unsubscribe('${ucid}')">解除</div>
+                            </div>
                         </div>
-                    </div>
-                `;
-                grid.appendChild(card);
-            });
+                    `;
+                    grid.appendChild(card);
+                });
+            } catch (error) {
+                subs.forEach((ucid, index) => {
+                    const card = document.createElement('div');
+                    card.className = 'sub-card';
+                    card.style.animationDelay = `${index * 0.05}s`;
+
+                    card.innerHTML = `
+                        <a href="/channel/${ucid}" class="channel-avatar-link">
+                            <div class="channel-avatar"><i class="fas fa-user-ninja"></i></div>
+                        </a>
+                        <div class="card-content">
+                            <div class="channel-name">${ucid}</div>
+                            <div class="channel-id">${ucid}</div>
+                            <div class="btn-group">
+                                <a href="/channel/${ucid}" class="action-btn btn-visit">移動</a>
+                                <div class="action-btn btn-unsub" onclick="event.stopPropagation(); unsubscribe('${ucid}')">解除</div>
+                            </div>
+                        </div>
+                    `;
+                    grid.appendChild(card);
+                });
+            }
         }
 
         function unsubscribe(ucid) {
             let subs = JSON.parse(localStorage.getItem('subscribed_channels') || '[]');
             subs = subs.filter(id => id !== ucid);
             localStorage.setItem('subscribed_channels', JSON.stringify(subs));
-            
-            // UIからカードを消す際のアニメーション
             loadSubscriptions();
         }
 
