@@ -509,25 +509,19 @@ async def fetch_fastest_stream_urls(
 
         # === 最優先取得フェーズ（Invidious ＆ RapidAPI を並列実行） ===
         async def _fetch_invidious_wrapper():
-            try:
-                v_data = await fetch_video_info_invidious_robust(
-                    v, force_instance=force_instance
-                )
-                res_dict = extract_invidious_streams(v_data)
-                if res_dict.get("videoUrls"):
-                    res_dict["stream_api_used"] = "invidious"
-                    return res_dict
-            except Exception:
-                pass
+            v_data = await fetch_video_info_invidious_robust(
+                v, force_instance=force_instance
+            )
+            res_dict = extract_invidious_streams(v_data)
+            if res_dict.get("videoUrls"):
+                res_dict["stream_api_used"] = "invidious"
+                return res_dict
             return None
 
         async def _fetch_rapidapi_wrapper():
-            try:
-                res = await fetch_rapidapi_stream(v)
-                if res and res.video_urls:
-                    return res.to_dict()
-            except Exception:
-                pass
+            res = await fetch_rapidapi_stream(v)
+            if res and res.video_urls:
+                return res.to_dict()
             return None
 
         priority_tasks = [
@@ -553,11 +547,9 @@ async def fetch_fastest_stream_urls(
 
         for task in pending_priority:
             try:
-                result = await asyncio.wait_for(task, timeout=0.1)
+                result = await task
                 if result:
                     return result
-            except (asyncio.TimeoutError, asyncio.CancelledError):
-                pass
             except Exception:
                 continue
 
