@@ -1,102 +1,637 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>再生履歴 - 仙人Tube+</title>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <style>
-        :root {
-            --primary-color: #007bff;
-            --bg-light: #fdfdfd;
-            --text-dark: #333333;
-            --card-bg: #ffffff;
-            --border-color: #e5e5e5;
+{% extends "base.html" %}
+
+{% block title %}再生履歴 - 仙人Tube+{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* --- YouTube Official Feed/History Page UI --- */
+    .history-container {
+        max-width: 1280px;
+        margin: 0 auto;
+        padding: 16px 24px;
+        display: flex;
+        gap: 32px;
+    }
+
+    .history-main {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .history-sidebar-controls {
+        width: 320px;
+        flex-shrink: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    /* ページヘッダー */
+    .history-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding-bottom: 16px;
+        margin-bottom: 24px;
+        border-bottom: 1px solid var(--yt-border-color, #e5e5e5);
+    }
+
+    .history-header-title {
+        font-size: 24px;
+        font-weight: 700;
+        margin: 0;
+        color: var(--yt-text-primary, #0f0f0f);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .history-header-title i {
+        color: var(--yt-text-primary, #0f0f0f);
+        font-size: 22px;
+    }
+
+    /* 操作ボタングループ */
+    .history-control-btn {
+        background-color: transparent;
+        color: var(--yt-text-primary, #0f0f0f);
+        border: none;
+        padding: 10px 16px;
+        border-radius: 20px;
+        cursor: pointer;
+        font-weight: 500;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        width: 100%;
+        text-align: left;
+        transition: background-color 0.2s;
+    }
+
+    .history-control-btn:hover {
+        background-color: var(--yt-hover-bg, rgba(0, 0, 0, 0.05));
+    }
+
+    .history-control-btn i {
+        font-size: 18px;
+        width: 24px;
+        text-align: center;
+    }
+
+    /* リストレイアウト */
+    .history-list {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    /* 個別履歴アイテム (YouTube横型カード風) */
+    .history-item {
+        position: relative;
+        display: flex;
+        gap: 16px;
+        background: transparent;
+        padding: 0;
+        border-radius: 12px;
+        text-decoration: none;
+        color: inherit;
+        transition: background-color 0.15s ease;
+    }
+
+    .thumb-wrapper {
+        position: relative;
+        width: 246px;
+        min-width: 246px;
+        aspect-ratio: 16 / 9;
+        border-radius: 12px;
+        overflow: hidden;
+        background-color: var(--yt-chip-bg, #e5e5e5);
+        flex-shrink: 0;
+    }
+
+    .thumb {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .info {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        padding: 4px 0;
+        min-width: 0;
+        padding-right: 40px;
+    }
+
+    .title {
+        font-size: 18px;
+        font-weight: 500;
+        line-height: 1.4;
+        margin-bottom: 6px;
+        color: var(--yt-text-primary, #0f0f0f);
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .meta {
+        font-size: 12px;
+        color: var(--yt-text-secondary, #606060);
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .meta-author {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 13px;
+        color: var(--yt-text-secondary, #606060);
+    }
+
+    .meta-time {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--yt-text-secondary, #606060);
+        margin-top: 4px;
+    }
+
+    /* 個別削除ボタン */
+    .item-delete-btn {
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        background: transparent;
+        border: none;
+        color: var(--yt-text-secondary, #606060);
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        transition: opacity 0.2s, background-color 0.2s;
+    }
+
+    .history-item:hover .item-delete-btn {
+        opacity: 1;
+    }
+
+    .item-delete-btn:hover {
+        background-color: var(--yt-hover-bg, rgba(0, 0, 0, 0.1));
+        color: var(--yt-text-primary, #0f0f0f);
+    }
+
+    /* 空の状態 (Empty State) */
+    .empty-msg {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 80px 20px;
+        text-align: center;
+    }
+
+    .empty-icon-circle {
+        width: 120px;
+        height: 120px;
+        border-radius: 50%;
+        background-color: var(--yt-hover-bg, rgba(0, 0, 0, 0.05));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 24px;
+    }
+
+    .empty-icon-circle i {
+        font-size: 48px;
+        color: var(--yt-text-secondary, #606060);
+    }
+
+    .empty-msg p {
+        font-size: 16px;
+        color: var(--yt-text-secondary, #606060);
+        margin: 0 0 24px 0;
+    }
+
+    .btn-explore {
+        background-color: var(--yt-chip-active-bg, #0f0f0f);
+        color: var(--yt-chip-active-text, #ffffff);
+        padding: 10px 20px;
+        border-radius: 20px;
+        text-decoration: none;
+        font-size: 14px;
+        font-weight: 500;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        transition: opacity 0.2s;
+    }
+
+    .btn-explore:hover {
+        opacity: 0.9;
+    }
+
+    /* YouTube Official UI Modal */
+    .yt-modal-backdrop {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background-color: rgba(0, 0, 0, 0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s ease;
+    }
+
+    .yt-modal-backdrop.active {
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    .yt-modal {
+        background-color: var(--yt-dialog-bg, #212121);
+        color: var(--yt-text-primary, #ffffff);
+        width: 100%;
+        max-width: 440px;
+        border-radius: 12px;
+        padding: 24px;
+        box-shadow: 0 12px 24px rgba(0, 0, 0, 0.4);
+        transform: scale(0.95);
+        transition: transform 0.2s ease;
+    }
+
+    .yt-modal-backdrop.active .yt-modal {
+        transform: scale(1);
+    }
+
+    .yt-modal-title {
+        font-size: 18px;
+        font-weight: 600;
+        margin: 0 0 12px 0;
+        color: var(--yt-text-primary, #ffffff);
+    }
+
+    .yt-modal-body {
+        font-size: 14px;
+        color: var(--yt-text-secondary, #aaaaaa);
+        line-height: 1.5;
+        margin-bottom: 24px;
+    }
+
+    .yt-modal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+    }
+
+    .yt-modal-btn {
+        background: none;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 18px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+
+    .yt-modal-btn-cancel {
+        color: var(--yt-text-primary, #ffffff);
+    }
+
+    .yt-modal-btn-cancel:hover {
+        background-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .yt-modal-btn-confirm {
+        color: #3ea6ff;
+    }
+
+    .yt-modal-btn-confirm:hover {
+        background-color: rgba(62, 166, 255, 0.15);
+    }
+
+    .yt-modal-btn-danger {
+        color: #ff4e4e;
+    }
+
+    .yt-modal-btn-danger:hover {
+        background-color: rgba(255, 78, 78, 0.15);
+    }
+
+    /* トースト通知 */
+    .yt-toast {
+        position: fixed;
+        bottom: 24px;
+        left: 24px;
+        background-color: var(--yt-toast-bg, #0f0f0f);
+        color: var(--yt-toast-text, #ffffff);
+        padding: 12px 20px;
+        border-radius: 8px;
+        font-size: 14px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        z-index: 10000;
+        transform: translateY(100px);
+        opacity: 0;
+        transition: transform 0.2s ease, opacity 0.2s ease;
+    }
+
+    .yt-toast.show {
+        transform: translateY(0);
+        opacity: 1;
+    }
+
+    /* レスポンシブ対応 */
+    @media (max-width: 900px) {
+        .history-container {
+            flex-direction: column-reverse;
         }
-        @media (prefers-color-scheme: dark) {
-            :root {
-                --bg-light: #121212;
-                --text-dark: #e0e0e0;
-                --glass-bg: rgba(30, 30, 30, 0.85);
-                --card-bg: #252525;
-                --border-color: #333;
+
+        .history-sidebar-controls {
+            width: 100%;
+        }
+    }
+
+    @media (max-width: 650px) {
+        .history-item {
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .thumb-wrapper {
+            width: 100%;
+            min-width: 100%;
+        }
+
+        .title {
+            font-size: 15px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="history-container">
+    <div class="history-main">
+        <div class="history-header">
+            <h1 class="history-header-title">
+                <i class="fas fa-history"></i>
+                再生履歴
+            </h1>
+        </div>
+
+        <div class="history-list" id="history-list-container">
+            <!-- JavaScriptで動的生成されます -->
+        </div>
+    </div>
+
+    <!-- サイドバーコントロール (YouTube PC版風) -->
+    <div class="history-sidebar-controls">
+        <button class="history-control-btn" id="btn-clear-all">
+            <i class="fas fa-trash-alt"></i>
+            <span>すべての再生履歴を消去</span>
+        </button>
+        <button class="history-control-btn" id="btn-toggle-pause">
+            <i class="fas fa-pause" id="pause-icon"></i>
+            <span id="pause-text">再生履歴の保存を一時停止</span>
+        </button>
+    </div>
+</div>
+
+<!-- YouTube風モーダルダイアログ -->
+<div class="yt-modal-backdrop" id="yt-modal">
+    <div class="yt-modal">
+        <h3 class="yt-modal-title" id="yt-modal-title">確認</h3>
+        <div class="yt-modal-body" id="yt-modal-body">処理を実行しますか？</div>
+        <div class="yt-modal-actions">
+            <button class="yt-modal-btn yt-modal-btn-cancel" id="yt-modal-cancel">キャンセル</button>
+            <button class="yt-modal-btn yt-modal-btn-confirm" id="yt-modal-confirm">実行</button>
+        </div>
+    </div>
+</div>
+
+<!-- トースト通知 -->
+<div class="yt-toast" id="yt-toast"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // サイドバーのアクティブ化
+        const sidebarHistory = document.querySelector('#yt-sidebar a[href="/history"]');
+        if (sidebarHistory) {
+            document.querySelectorAll('#yt-sidebar .nav-item').forEach(el => el.classList.remove('active'));
+            sidebarHistory.classList.add('active');
+        }
+
+        // --- モーダル制御 ---
+        let onConfirmCallback = null;
+
+        function showModal(title, body, confirmText, isDanger, onConfirm) {
+            document.getElementById('yt-modal-title').textContent = title;
+            document.getElementById('yt-modal-body').textContent = body;
+            
+            const confirmBtn = document.getElementById('yt-modal-confirm');
+            confirmBtn.textContent = confirmText;
+
+            if (isDanger) {
+                confirmBtn.className = 'yt-modal-btn yt-modal-btn-danger';
+            } else {
+                confirmBtn.className = 'yt-modal-btn yt-modal-btn-confirm';
+            }
+
+            onConfirmCallback = onConfirm;
+            document.getElementById('yt-modal').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('yt-modal').classList.remove('active');
+            onConfirmCallback = null;
+        }
+
+        document.getElementById('yt-modal-cancel').addEventListener('click', closeModal);
+        document.getElementById('yt-modal').addEventListener('click', function (e) {
+            if (e.target.id === 'yt-modal') closeModal();
+        });
+
+        document.getElementById('yt-modal-confirm').addEventListener('click', function () {
+            if (onConfirmCallback) onConfirmCallback();
+            closeModal();
+        });
+
+        function showToast(message) {
+            const toast = document.getElementById('yt-toast');
+            toast.textContent = message;
+            toast.classList.add('show');
+            setTimeout(function () {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        // --- 履歴データの描画と管理 ---
+        function getWatchHistory() {
+            try {
+                return JSON.parse(localStorage.getItem('yt_watch_history')) || [];
+            } catch (e) {
+                return [];
             }
         }
 
-        body { font-family: 'Noto Sans JP', sans-serif; margin: 0; background-color: var(--bg-light); color: var(--text-dark); padding-top: 80px; }
-        
-        #top-bar {
-            position: fixed; top: 0; left: 0; width: 100%;
-            background: rgba(255,255,255,0.85); backdrop-filter: blur(10px);
-            z-index: 1000; padding: 12px 25px; display: flex; align-items: center;
-            box-shadow: 0 2px 15px rgba(0,0,0,0.05); box-sizing: border-box;
+        function saveWatchHistory(history) {
+            localStorage.setItem('yt_watch_history', JSON.stringify(history));
         }
-        @media (prefers-color-scheme: dark) { #top-bar { background: rgba(30,30,30,0.85); } }
 
-        /* ロゴの「+」を青くする設定 */
-        .logo-small sup { color: var(--primary-color); font-size: 0.6em; }
+        function updatePauseButtonState() {
+            const isPaused = localStorage.getItem('yt_pause_history') === 'true';
+            const icon = document.getElementById('pause-icon');
+            const text = document.getElementById('pause-text');
 
-        .container { max-width: 1000px; margin: 0 auto; padding: 20px; }
-        .header-flex { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
-        
-        .history-list { display: flex; flex-direction: column; gap: 15px; }
-        .history-item {
-            display: flex; gap: 20px; background: var(--card-bg); padding: 15px;
-            border-radius: 15px; border: 1px solid var(--border-color);
-            text-decoration: none; color: inherit; transition: transform 0.2s;
+            if (isPaused) {
+                icon.className = 'fas fa-play';
+                text.textContent = '再生履歴の保存を再開';
+            } else {
+                icon.className = 'fas fa-pause';
+                text.textContent = '再生履歴の保存を一時停止';
+            }
         }
-        .history-item:hover { transform: scale(1.01); border-color: var(--primary-color); }
-        .thumb { width: 200px; aspect-ratio: 16/9; border-radius: 10px; object-fit: cover; }
-        
-        .info { flex: 1; }
-        .title { font-size: 1.1rem; font-weight: 700; margin-bottom: 5px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-        .meta { font-size: 0.85rem; color: #888; }
-        
-        .clear-btn {
-            background: #ff4d4f; color: white; border: none; padding: 10px 20px;
-            border-radius: 50px; cursor: pointer; text-decoration: none; font-weight: 700; font-size: 0.9rem;
-        }
-        .empty-msg { text-align: center; margin-top: 100px; color: #888; }
-    </style>
-</head>
-<body>
-    <header id="top-bar">
-        <div class="logo-small" onclick="location.href='/'" style="cursor:pointer; font-weight:700; font-size:1.5rem;">
-            仙人Tube<sup>+</sup>
-        </div>
-    </header>
 
-    <main class="container">
-        <div class="header-flex">
-            <h1><i class="fas fa-history" style="margin-right:10px; color:var(--primary-color);"></i>再生履歴</h1>
-            {% if history %}
-            <a href="/history/clear" class="clear-btn" onclick="return confirm('履歴をすべて削除しますか？')">すべて削除</a>
-            {% endif %}
-        </div>
+        function renderHistory() {
+            const history = getWatchHistory();
+            const container = document.getElementById('history-list-container');
+            const btnClearAll = document.getElementById('btn-clear-all');
 
-        <div class="history-list">
-            {% for item in history %}
-            <a href="/watch?v={{ item.videoId }}" class="history-item">
-                <img src="/thumbnail?v={{ item.videoId }}" class="thumb">
-                <div class="info">
-                    <div class="title">{{ item.title }}</div>
-                    <div class="meta">
-                        <div><i class="fas fa-user"></i> {{ item.author }}</div>
-                        <div><i class="fas fa-clock"></i> {{ item.added_at }}</div>
+            if (history.length === 0) {
+                btnClearAll.style.display = 'none';
+                container.innerHTML = `
+                    <div class="empty-msg">
+                        <div class="empty-icon-circle">
+                            <i class="fas fa-history"></i>
+                        </div>
+                        <p>再生履歴はありません</p>
+                        <a href="/" class="btn-explore">
+                            <i class="fas fa-search"></i>
+                            動画を探しに行く
+                        </a>
                     </div>
-                </div>
-            </a>
-            {% endfor %}
+                `;
+                return;
+            }
 
-            {% if not history %}
-            <div class="empty-msg">
-                <i class="fas fa-ghost fa-3x" style="margin-bottom:20px;"></i>
-                <p>履歴はありません</p>
-                <a href="/" style="color:var(--primary-color);">動画を探しに行く</a>
-            </div>
-            {% endif %}
-        </div>
-    </main>
-</body>
-</html>
+            btnClearAll.style.display = 'flex';
+            container.innerHTML = '';
+
+            history.forEach((item, index) => {
+                const itemEl = document.createElement('div');
+                itemEl.className = 'history-item';
+                
+                const authorHtml = item.author ? `
+                    <div class="meta-author">
+                        <i class="fas fa-user-circle"></i>
+                        <span>${escapeHtml(item.author)}</span>
+                    </div>` : '';
+
+                const timeHtml = item.added_at ? `
+                    <div class="meta-time">
+                        <i class="far fa-clock"></i>
+                        <span>${escapeHtml(item.added_at)}</span>
+                    </div>` : '';
+
+                itemEl.innerHTML = `
+                    <a href="/watch?v=${encodeURIComponent(item.videoId)}" class="thumb-wrapper">
+                        <img src="/thumbnail?v=${encodeURIComponent(item.videoId)}" class="thumb" alt="${escapeHtml(item.title || '')}">
+                    </a>
+                    <div class="info">
+                        <a href="/watch?v=${encodeURIComponent(item.videoId)}" class="title" style="text-decoration:none; color:inherit;">${escapeHtml(item.title || '無題の動画')}</a>
+                        <div class="meta">
+                            ${authorHtml}
+                            ${timeHtml}
+                        </div>
+                    </div>
+                    <button class="item-delete-btn" data-index="${index}" title="再生履歴から削除">
+                        <i class="fas fa-times"></i>
+                    </button>
+                `;
+                container.appendChild(itemEl);
+            });
+
+            // 個別削除イベントの適用
+            document.querySelectorAll('.item-delete-btn').forEach(btn => {
+                btn.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const idx = parseInt(this.getAttribute('data-index'), 10);
+                    deleteSingleItem(idx);
+                });
+            });
+        }
+
+        function deleteSingleItem(index) {
+            let history = getWatchHistory();
+            history.splice(index, 1);
+            saveWatchHistory(history);
+            renderHistory();
+            showToast('再生履歴から削除しました');
+        }
+
+        function escapeHtml(str) {
+            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        // --- イベントリスナー ---
+        document.getElementById('btn-clear-all').addEventListener('click', function () {
+            showModal(
+                '再生履歴を消去しますか？',
+                'すべてのデバイス上のすべての仙人Tubeアプリから再生履歴が削除されます。',
+                '再生履歴を消去',
+                true,
+                function () {
+                    localStorage.removeItem('yt_watch_history');
+                    renderHistory();
+                    showToast('再生履歴を消去しました');
+                }
+            );
+        });
+
+        document.getElementById('btn-toggle-pause').addEventListener('click', function () {
+            const isPaused = localStorage.getItem('yt_pause_history') === 'true';
+            if (isPaused) {
+                localStorage.setItem('yt_pause_history', 'false');
+                updatePauseButtonState();
+                showToast('再生履歴の保存を再開しました');
+            } else {
+                showModal(
+                    '再生履歴を一時停止しますか？',
+                    '再生履歴を一時停止すると、今後視聴する動画が履歴に表示されなくなります。',
+                    '一時停止',
+                    false,
+                    function () {
+                        localStorage.setItem('yt_pause_history', 'true');
+                        updatePauseButtonState();
+                        showToast('再生履歴を一時停止しました');
+                    }
+                );
+            }
+        });
+
+        // 初期描画
+        updatePauseButtonState();
+        renderHistory();
+    });
+</script>
+{% endblock %}

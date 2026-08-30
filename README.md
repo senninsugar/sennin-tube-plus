@@ -1,3 +1,16 @@
+# v 2.0
+invidiousのほかにさまざまなapiを搭載
+- senninapi(仙人tubeplus以外で使うことを禁ずる)
+- piped
+- sia
+をついか
+  
+
+
+
+
+
+
 # v1.3
 インスタンス追加と高速化
 # デプロイ方法

@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Code Runner Mobile</title>
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <style>
+    :root {
+      --bg-main: #0f172a;
+      --bg-surface: #1e293b;
+      --bg-darker: #020617;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --danger: #ef4444;
+      --text-main: #f8fafc;
+      --text-sub: #94a3b8;
+      --border: #334155;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Fira Code", Consolas, monospace;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      background: var(--bg-main);
+      color: var(--text-main);
+      height: 100vh;
+      height: 100dvh; /* スマホのアドレスバー変動対策 */
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ヘッダー */
+    header {
+      padding: 12px 16px;
+      background: var(--bg-darker);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+    }
+
+    header h1 {
+      font-size: 16px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn {
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      min-height: 38px;
+    }
+
+    .btn-run {
+      background: #10b981;
+    }
+
+    .icon-btn {
+      background: transparent;
+      color: var(--text-sub);
+      border: none;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+
+    .icon-btn:active {
+      background: var(--bg-surface);
+      color: var(--text-main);
+    }
+
+    /* タブ切り替えバー (スマホ特有のナビゲーション) */
+    .tab-bar {
+      display: flex;
+      background: var(--bg-darker);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .tab-btn {
+      flex: 1;
+      padding: 12px 0;
+      background: transparent;
+      border: none;
+      color: var(--text-sub);
+      font-size: 13px;
+      font-weight: 600;
+      text-align: center;
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+    }
+
+    .tab-btn.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+      background: rgba(59, 130, 246, 0.05);
+    }
+
+    /* メインコンテンツエリア */
+    .editor-container {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .tab-content {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: none;
+      flex-direction: column;
+    }
+
+    .tab-content.active {
+      display: flex;
+    }
+
+    textarea {
+      flex: 1;
+      width: 100%;
+      background: var(--bg-main);
+      color: var(--text-main);
+      border: none;
+      padding: 16px;
+      resize: none;
+      outline: none;
+      font-size: 15px;
+      line-height: 1.5;
+      font-family: "Fira Code", Monaco, Consolas, monospace;
+    }
+
+    /* プレビューiframe */
+    iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+      background: white;
+    }
+
+    /* ドロップダウンメニュー */
+    .dropdown {
+      position: relative;
+    }
+
+    .dropdown-menu {
+      display: none;
+      position: absolute;
+      right: 0;
+      top: 100%;
+      margin-top: 8px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+      z-index: 100;
+      min-width: 180px;
+      overflow: hidden;
+    }
+
+    .dropdown-menu.show {
+      display: block;
+    }
+
+    .dropdown-item {
+      width: 100%;
+      background: transparent;
+      color: var(--text-main);
+      border: none;
+      padding: 14px 16px;
+      font-size: 14px;
+      text-align: left;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .dropdown-item:active {
+      background: var(--border);
+    }
+
+    /* モーダル (ボトムシート構造) */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: flex-end;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+      z-index: 1000;
+    }
+
+    .modal-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .modal-content {
+      background: var(--bg-surface);
+      width: 100%;
+      max-height: 85vh;
+      border-radius: 20px 20px 0 0;
+      padding: 20px 20px calc(20px + env(safe-area-inset-bottom));
+      display: flex;
+      flex-direction: column;
+      transform: translateY(100%);
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .modal-overlay.active .modal-content {
+      transform: translateY(0);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+
+    .modal-header h2 {
+      font-size: 18px;
+    }
+
+    /* 一覧リスト */
+    .data-list {
+      overflow-y: auto;
+      list-style: none;
+    }
+
+    .data-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 14px 16px;
+      background: var(--bg-main);
+      border-radius: 10px;
+      margin-bottom: 10px;
+      border: 1px solid transparent;
+    }
+
+    .data-item:active {
+      border-color: var(--primary);
+    }
+
+    .data-name {
+      font-weight: 600;
+      font-size: 15px;
+    }
+
+    .delete-btn {
+      background: var(--danger);
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+    }
+
+    /* ポップアップダイアログ */
+    .custom-dialog-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+      z-index: 2000;
+    }
+
+    .custom-dialog-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .custom-dialog {
+      background: var(--bg-surface);
+      padding: 20px;
+      border-radius: 16px;
+      width: 100%;
+      max-width: 340px;
+      border: 1px solid var(--border);
+    }
+
+    .custom-dialog h3 {
+      font-size: 17px;
+      margin-bottom: 8px;
+    }
+
+    .custom-dialog p {
+      font-size: 14px;
+      color: var(--text-sub);
+      margin-bottom: 16px;
+      line-height: 1.4;
+    }
+
+    .custom-dialog input {
+      width: 100%;
+      padding: 12px;
+      background: var(--bg-main);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-main);
+      font-size: 15px;
+      outline: none;
+      margin-bottom: 16px;
+    }
+
+    .dialog-buttons {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    .dialog-btn-cancel {
+      background: var(--border);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ヘッダー -->
+  <header>
+    <h1><span class="material-icons" style="color:var(--primary);">code</span> Code Runner</h1>
+    <div class="actions">
+      <button class="btn btn-run" onclick="runCode(true)">
+        <span class="material-icons" style="font-size: 18px;">play_arrow</span> 実行
+      </button>
+
+      <div class="dropdown">
+        <button class="icon-btn" onclick="toggleMenu(event)">
+          <span class="material-icons">more_vert</span>
+        </button>
+        <div class="dropdown-menu" id="dropdownMenu">
+          <button class="dropdown-item" onclick="triggerSave()">
+            <span class="material-icons">save</span> 保存
+          </button>
+          <button class="dropdown-item" onclick="triggerList()">
+            <span class="material-icons">folder</span> 保存リスト
+          </button>
+          <button class="dropdown-item" onclick="triggerCopy()">
+            <span class="material-icons">content_copy</span> コード一括コピー
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- タブナビゲーション -->
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="switchTab('html')">HTML</button>
+    <button class="tab-btn" onclick="switchTab('css')">CSS</button>
+    <button class="tab-btn" onclick="switchTab('js')">JS</button>
+    <button class="tab-btn" onclick="switchTab('preview')">Preview</button>
+  </div>
+
+  <!-- エディタ＆プレビューエリア -->
+  <div class="editor-container">
+    <div class="tab-content active" id="tab-html">
+      <textarea id="html" spellcheck="false"><h1>Hello World</h1>
+<p>スマホでサクサク動作します！</p></textarea>
+    </div>
+
+    <div class="tab-content" id="tab-css">
+      <textarea id="css" spellcheck="false">body {
+  background: #111827;
+  color: #38bdf8;
+  font-family: sans-serif;
+  padding: 20px;
+}</textarea>
+    </div>
+
+    <div class="tab-content" id="tab-js">
+      <textarea id="js" spellcheck="false">console.log("Hello Mobile World!");</textarea>
+    </div>
+
+    <div class="tab-content" id="tab-preview">
+      <iframe id="previewFrame"></iframe>
+    </div>
+  </div>
+
+  <!-- ボトムシートモーダル (保存一覧) -->
+  <div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h2>保存データ一覧</h2>
+        <button class="icon-btn" onclick="closeModal()">
+          <span class="material-icons">close</span>
+        </button>
+      </div>
+      <ul class="data-list" id="dataList"></ul>
+    </div>
+  </div>
+
+  <!-- ダイアログ -->
+  <div class="custom-dialog-overlay" id="dialogOverlay">
+    <div class="custom-dialog" id="dialogContent"></div>
+  </div>
+
+  <script>
+    // タブ切り替え処理
+    function switchTab(tabName) {
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+      const selectedBtn = Array.from(document.querySelectorAll('.tab-btn')).find(btn => btn.textContent.toLowerCase().includes(tabName));
+      if (selectedBtn) selectedBtn.classList.add('active');
+
+      const targetContent = document.getElementById(`tab-${tabName}`);
+      if (targetContent) targetContent.classList.add('active');
+
+      if (tabName === 'preview') {
+        runCode(false);
+      }
+    }
+
+    // コードのレンダリング (画面内iframeに書き出し)
+    function runCode(autoSwitchToPreview = false) {
+      const html = document.getElementById("html").value;
+      const css = document.getElementById("css").value;
+      const js = document.getElementById("js").value;
+
+      const previewContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>${css}</style>
+</head>
+<body>
+  ${html}
+  <script>${js}<\/script>
+</body>
+</html>`;
+
+      const iframe = document.getElementById("previewFrame");
+      const doc = iframe.contentDocument || iframe.contentWindow.document;
+      doc.open();
+      doc.write(previewContent);
+      doc.close();
+
+      if (autoSwitchToPreview) {
+        switchTab('preview');
+      }
+    }
+
+    // メニュー開閉
+    function toggleMenu(e) {
+      e.stopPropagation();
+      document.getElementById("dropdownMenu").classList.toggle("show");
+    }
+
+    window.addEventListener("click", () => {
+      document.getElementById("dropdownMenu").classList.remove("show");
+    });
+
+    function triggerSave() {
+      document.getElementById("dropdownMenu").classList.remove("show");
+      saveCode();
+    }
+
+    function triggerList() {
+      document.getElementById("dropdownMenu").classList.remove("show");
+      openModal();
+    }
+
+    function triggerCopy() {
+      const html = document.getElementById("html").value;
+      const css = document.getElementById("css").value;
+      const js = document.getElementById("js").value;
+
+      const fullCode = `<!DOCTYPE html>\n<html>\n<head>\n<style>\n${css}\n</style>\n</head>\n<body>\n${html}\n<script>\n${js}\n<\/script>\n</body>\n</html>`;
+
+      copyToClipboard(fullCode, "コード全体をコピーしました！");
+      document.getElementById("dropdownMenu").classList.remove("show");
+    }
+
+    function copyToClipboard(text, msg) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => showCustomAlert("完了", msg));
+      } else {
+        showCustomAlert("完了", msg);
+      }
+    }
+
+    // 独自ダイアログ制御
+    function openCustomDialog(html) {
+      const overlay = document.getElementById("dialogOverlay");
+      const content = document.getElementById("dialogContent");
+      content.innerHTML = html;
+      overlay.classList.add("active");
+    }
+
+    function closeCustomDialog() {
+      document.getElementById("dialogOverlay").classList.remove("active");
+    }
+
+    function showCustomAlert(title, text) {
+      openCustomDialog(`
+        <h3>${title}</h3>
+        <p>${text}</p>
+        <div class="dialog-buttons">
+          <button class="btn" onclick="closeCustomDialog()">OK</button>
+        </div>
+      `);
+    }
+
+    // LocalStorage 管理
+    function getSavedData() {
+      const data = localStorage.getItem('codeRunnerData');
+      return data ? JSON.parse(data) : {};
+    }
+
+    function saveCode() {
+      openCustomDialog(`
+        <h3>データを保存</h3>
+        <p>プロジェクト名を入力してください</p>
+        <input type="text" id="saveNameInput" placeholder="例: My App">
+        <div class="dialog-buttons">
+          <button class="btn dialog-btn-cancel" onclick="closeCustomDialog()">キャンセル</button>
+          <button class="btn" onclick="executeSave()">保存</button>
+        </div>
+      `);
+      setTimeout(() => document.getElementById("saveNameInput")?.focus(), 100);
+    }
+
+    function executeSave() {
+      const input = document.getElementById("saveNameInput");
+      const name = input.value.trim();
+      if (!name) return;
+
+      const data = getSavedData();
+      data[name] = {
+        html: document.getElementById("html").value,
+        css: document.getElementById("css").value,
+        js: document.getElementById("js").value
+      };
+
+      localStorage.setItem('codeRunnerData', JSON.stringify(data));
+      closeCustomDialog();
+      showCustomAlert("保存完了", `「${name}」を保存しました。`);
+    }
+
+    function openModal() {
+      const list = document.getElementById("dataList");
+      list.innerHTML = "";
+      const data = getSavedData();
+      const keys = Object.keys(data);
+
+      if (keys.length === 0) {
+        list.innerHTML = '<li style="text-align:center; color:var(--text-sub); padding: 20px;">保存データがありません</li>';
+      } else {
+        keys.forEach(key => {
+          const li = document.createElement("li");
+          li.className = "data-item";
+          li.onclick = () => confirmLoad(key);
+          li.innerHTML = `
+            <span class="data-name">${key}</span>
+            <button class="delete-btn" onclick="event.stopPropagation(); confirmDelete('${key}')">削除</button>
+          `;
+          list.appendChild(li);
+        });
+      }
+
+      document.getElementById("modalOverlay").classList.add("active");
+    }
+
+    function closeModal() {
+      document.getElementById("modalOverlay").classList.remove("active");
+    }
+
+    function confirmLoad(key) {
+      openCustomDialog(`
+        <h3>読み込み確認</h3>
+        <p>「${key}」を読み込みますか？<br><small style="color:var(--danger)">※現在の編集内容は上書きされます。</small></p>
+        <div class="dialog-buttons">
+          <button class="btn dialog-btn-cancel" onclick="closeCustomDialog()">キャンセル</button>
+          <button class="btn" onclick="executeLoad('${key}')">読み込む</button>
+        </div>
+      `);
+    }
+
+    function executeLoad(key) {
+      closeCustomDialog();
+      const data = getSavedData()[key];
+      if (data) {
+        document.getElementById("html").value = data.html;
+        document.getElementById("css").value = data.css;
+        document.getElementById("js").value = data.js;
+        closeModal();
+        showCustomAlert("読込完了", `「${key}」を読み込みました。`);
+        switchTab('html');
+      }
+    }
+
+    function confirmDelete(key) {
+      openCustomDialog(`
+        <h3>削除確認</h3>
+        <p>「${key}」を削除しますか？</p>
+        <div class="dialog-buttons">
+          <button class="btn dialog-btn-cancel" onclick="closeCustomDialog()">キャンセル</button>
+          <button class="btn" style="background:var(--danger)" onclick="executeDelete('${key}')">削除</button>
+        </div>
+      `);
+    }
+
+    function executeDelete(key) {
+      closeCustomDialog();
+      const data = getSavedData();
+      delete data[key];
+      localStorage.setItem('codeRunnerData', JSON.stringify(data));
+      openModal();
+    }
+  </script>
+</body>
+</html>

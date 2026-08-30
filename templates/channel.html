@@ -1,346 +1,631 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ author }} - 仙人Tube+</title>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <style>
-        :root {
-            --primary-color: #007bff;
-            --bg-light: #fdfdfd;
-            --text-dark: #333333;
-            --gray-logo: #555555;
-            --glass-bg: rgba(255, 255, 255, 0.85);
-            --card-bg: #ffffff;
-            --border-color: #e5e5e5;
+{% extends "base.html" %}
+
+{% block title %}{{ author if author else "チャンネル" }} - 仙人Tube{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* --- YouTube Official Channel Page CSS --- */
+    .channel-page-wrapper {
+        width: 100%;
+        max-width: 1284px;
+        margin: 0 auto;
+        padding-bottom: 40px;
+    }
+
+    /* チャンネルバナー（カバー画像がある場合は表示） */
+    .channel-banner {
+        width: 100%;
+        aspect-ratio: 6 / 1;
+        max-height: 212px;
+        background-color: var(--yt-hover-bg);
+        border-radius: 16px;
+        overflow: hidden;
+        margin-top: 8px;
+    }
+
+    .channel-banner img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    /* チャンネルヘッダー (公式スタイルのFlex構造) */
+    .channel-header {
+        display: flex;
+        align-items: flex-start;
+        padding: 24px 16px 12px;
+        gap: 24px;
+    }
+
+    .channel-avatar-wrapper {
+        flex-shrink: 0;
+    }
+
+    .channel-avatar {
+        width: 160px;
+        height: 160px;
+        border-radius: 50%;
+        object-fit: cover;
+        background-color: var(--yt-hover-bg);
+    }
+
+    .channel-info {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        min-width: 0;
+    }
+
+    .channel-name-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .channel-title {
+        font-size: 36px;
+        font-weight: 700;
+        color: var(--yt-text-primary);
+        line-height: 1.2;
+        margin: 0;
+        word-break: break-word;
+    }
+
+    /* サブ情報（ハンドラ名・登録者数・動画本数） */
+    .channel-metadata {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px 8px;
+        font-size: 14px;
+        color: var(--yt-text-secondary);
+        margin-top: 6px;
+    }
+
+    .metadata-dot {
+        font-size: 10px;
+        opacity: 0.6;
+    }
+
+    /* チャンネル概要欄（1〜2行プレビュー） */
+    .channel-description-preview {
+        margin-top: 10px;
+        font-size: 14px;
+        color: var(--yt-text-secondary);
+        max-width: 600px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .description-text {
+        display: -webkit-box;
+        -webkit-line-clamp: 1;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        word-break: break-word;
+    }
+
+    .description-more-icon {
+        font-size: 18px;
+        color: var(--yt-text-primary);
+    }
+
+    /* アクションボタン群 */
+    .channel-actions {
+        margin-top: 16px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    /* YouTube公式の登録ボタン (黒背景/白文字 or ライトモードで反転) */
+    .yt-sub-btn {
+        height: 36px;
+        padding: 0 16px;
+        border-radius: 18px;
+        border: none;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        background-color: var(--yt-text-primary);
+        color: var(--yt-bg);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        transition: opacity 0.2s;
+    }
+
+    .yt-sub-btn:hover {
+        opacity: 0.9;
+    }
+
+    .yt-sub-btn.subscribed {
+        background-color: var(--yt-chip-bg);
+        color: var(--yt-text-primary);
+        border: 1px solid var(--yt-border-color);
+    }
+
+    .yt-sub-btn.subscribed:hover {
+        background-color: var(--yt-hover-bg);
+    }
+
+    /* 公式スタイルのタブナビゲーション */
+    .channel-tabs-container {
+        border-bottom: 1px solid var(--yt-border-color);
+        margin-top: 12px;
+        position: sticky;
+        top: 56px;
+        background-color: var(--yt-bg);
+        z-index: 10;
+    }
+
+    .channel-tabs {
+        display: flex;
+        gap: 24px;
+        padding: 0 16px;
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+
+    .channel-tabs::-webkit-scrollbar {
+        display: none;
+    }
+
+    .tab-item {
+        padding: 12px 0;
+        font-size: 15px;
+        font-weight: 500;
+        color: var(--yt-text-secondary);
+        text-decoration: none;
+        position: relative;
+        white-space: nowrap;
+        transition: color 0.15s;
+    }
+
+    .tab-item:hover {
+        color: var(--yt-text-primary);
+    }
+
+    .tab-item.active {
+        color: var(--yt-text-primary);
+        font-weight: 600;
+    }
+
+    .tab-item.active::after {
+        content: "";
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background-color: var(--yt-text-primary);
+        border-radius: 2px 2px 0 0;
+    }
+
+    /* ソートチップスバー */
+    .sort-chips-bar {
+        padding: 16px 16px 8px;
+        display: flex;
+        gap: 8px;
+    }
+
+    .sort-chip {
+        height: 32px;
+        padding: 0 12px;
+        border-radius: 8px;
+        background-color: var(--yt-chip-bg);
+        color: var(--yt-text-primary);
+        font-size: 14px;
+        font-weight: 500;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        border: none;
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+
+    .sort-chip:hover {
+        background-color: var(--yt-hover-bg);
+    }
+
+    .sort-chip.active {
+        background-color: var(--yt-text-primary);
+        color: var(--yt-bg);
+    }
+
+    /* 動画グリッドレイアウト */
+    .video-grid {
+        padding: 12px 16px;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 24px 16px;
+    }
+
+    /* Shorts用 縦型グリッド */
+    .shorts-grid {
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+        gap: 16px 12px;
+    }
+
+    /* YouTube標準カードデザイン */
+    .yt-card {
+        text-decoration: none;
+        color: inherit;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .card-thumbnail-wrapper {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        background-color: var(--yt-chip-bg);
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    .card-thumbnail-wrapper.shorts-aspect {
+        aspect-ratio: 9 / 16;
+    }
+
+    .card-thumbnail {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .card-duration {
+        position: absolute;
+        bottom: 6px;
+        right: 6px;
+        background-color: rgba(0, 0, 0, 0.8);
+        color: #fff;
+        font-size: 12px;
+        font-weight: 500;
+        padding: 1px 4px;
+        border-radius: 4px;
+    }
+
+    .card-details {
+        display: flex;
+        flex-direction: column;
+        padding-top: 8px;
+    }
+
+    .card-title {
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--yt-text-primary);
+        line-height: 1.4;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        word-break: break-word;
+    }
+
+    .card-metadata {
+        font-size: 12px;
+        color: var(--yt-text-secondary);
+        margin-top: 4px;
+        line-height: 1.4;
+    }
+
+    /* 概要ダイアログ Modal */
+    .modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background-color: rgba(0, 0, 0, 0.6);
+        z-index: 2000;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .modal-content {
+        background-color: var(--yt-suggest-bg, #212121);
+        color: var(--yt-text-primary);
+        width: 90%;
+        max-width: 600px;
+        max-height: 80vh;
+        border-radius: 12px;
+        padding: 24px;
+        overflow-y: auto;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    }
+
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 18px;
+        font-weight: 700;
+        margin-bottom: 16px;
+    }
+
+    .modal-close-btn {
+        background: none;
+        border: none;
+        color: var(--yt-text-primary);
+        cursor: pointer;
+        padding: 4px;
+    }
+
+    /* --- レスポンシブ (スマホ表示最適化) --- */
+    @media (max-width: 860px) {
+        .channel-avatar {
+            width: 80px;
+            height: 80px;
         }
 
-        @media (prefers-color-scheme: dark) {
-            :root {
-                --bg-light: #121212;
-                --text-dark: #e0e0e0;
-                --glass-bg: rgba(30, 30, 30, 0.85);
-                --gray-logo: #bbbbbb;
-                --card-bg: #252525;
-                --border-color: #333;
-            }
+        .channel-title {
+            font-size: 24px;
         }
 
-        body {
-            font-family: 'Noto Sans JP', sans-serif;
-            margin: 0;
-            background-color: var(--bg-light);
-            color: var(--text-dark);
-            padding-top: 80px;
-        }
-
-        #top-bar {
-            position: fixed; top: 0; left: 0; width: 100%;
-            background-color: var(--glass-bg);
-            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-            z-index: 1000; padding: 12px 25px;
-            display: flex; align-items: center; justify-content: space-between;
-            box-shadow: 0 2px 15px rgba(0, 0, 0, 0.05);
-            box-sizing: border-box;
-        }
-
-        .logo-small h2 {
-            font-size: 1.5rem; color: var(--gray-logo); margin: 0; cursor: pointer;
-        }
-
-        .logo-small sup { color: var(--primary-color); font-size: 0.6em; }
-
-        .search-container {
-            position: relative; flex: 0 1 600px; margin: 0 20px;
-        }
-
-        .search-container input {
-            width: 100%; padding: 12px 20px 12px 45px;
-            border: 1px solid var(--border-color); border-radius: 50px;
-            background: var(--card-bg); color: var(--text-dark);
-            outline: none; transition: all 0.3s; box-sizing: border-box;
-        }
-
-        .search-container i {
-            position: absolute; left: 18px; top: 50%; transform: translateY(-50%);
-            color: #aaa;
-        }
-
-        /* チャンネルヘッダー */
         .channel-header {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 40px 20px;
-            display: flex;
-            align-items: center;
-            gap: 25px;
+            gap: 16px;
+            padding: 16px;
         }
 
-        .channel-icon {
-            width: 120px;
-            height: 120px;
-            border-radius: 50%;
-            object-fit: cover;
-            border: 2px solid var(--border-color);
+        .channel-banner {
+            border-radius: 0;
+            margin-top: 0;
         }
+    }
 
-        .channel-meta h1 { margin: 0; font-size: 2rem; }
-        .sub-count { color: #888; font-size: 1rem; margin-bottom: 10px; }
-        
-        /* チャンネル登録ボタンのスタイル */
-        .sub-btn {
-            background-color: #000; color: #fff; border: none; padding: 10px 20px;
-            border-radius: 50px; font-weight: bold; cursor: pointer; margin-top: 10px;
-            transition: opacity 0.2s;
-        }
-        @media (prefers-color-scheme: dark) { .sub-btn { background-color: #fff; color: #000; } }
-        .sub-btn.subscribed { background-color: #555; color: #fff; }
-
-        /* 概要欄のスタイル */
-        .desc-container { font-size: 0.85rem; opacity: 0.8; max-width: 600px; margin-top: 5px; }
-        .desc-content { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-        .desc-content.expanded { display: block; -webkit-line-clamp: initial; }
-        .desc-toggle { background: none; border: none; color: var(--primary-color); cursor: pointer; padding: 0; font-weight: bold; font-size: 0.85rem; margin-top: 5px; }
-
-        /* ソート・ナビゲーション */
-        .channel-nav {
-            max-width: 1200px;
-            margin: 0 auto;
-            border-bottom: 1px solid var(--border-color);
-            padding: 0 20px;
-            display: flex;
-            gap: 20px;
-            overflow-x: auto;
-        }
-
-        .nav-item {
-            padding: 15px 0;
-            cursor: pointer;
-            font-weight: bold;
-            border-bottom: 3px solid transparent;
-            text-decoration: none;
-            color: inherit;
-            white-space: nowrap;
-        }
-
-        .nav-item.active {
-            border-bottom-color: var(--primary-color);
-            color: var(--primary-color);
-        }
-
-        /* グリッドレイアウト */
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 30px 20px;
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-            gap: 20px;
-        }
-
-        /* Shorts用グリッド */
-        .shorts-grid {
-            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-        }
-
-        .video-card {
-            text-decoration: none;
-            color: inherit;
-            transition: transform 0.2s;
-        }
-
-        .video-card:hover { transform: translateY(-5px); }
-
-        .thumb-box {
-            position: relative;
-            width: 100%;
-            aspect-ratio: 16/9;
-            background: #000;
-            border-radius: 12px;
-            overflow: hidden;
-        }
-
-        .shorts-box { aspect-ratio: 9/16; }
-
-        .thumb { width: 100%; height: 100%; object-fit: cover; }
-
-        .v-title {
-            margin-top: 10px;
-            font-weight: bold;
-            font-size: 0.95rem;
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-        }
-
-        .v-meta { font-size: 0.85rem; color: #888; margin-top: 4px; }
-
-        /* コミュニティ投稿 */
-        .comm-container {
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 30px 20px;
-            display: flex;
+    @media (max-width: 480px) {
+        .channel-header {
             flex-direction: column;
-            gap: 20px;
+            align-items: flex-start;
         }
 
-        .comm-post {
-            background: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            padding: 20px;
+        .yt-sub-btn {
+            width: 100%;
         }
 
-        .comm-header { display: flex; align-items: center; gap: 12px; margin-bottom: 15px; }
-        .comm-icon { width: 40px; height: 40px; border-radius: 50%; }
-        .comm-author { font-weight: bold; }
-        .comm-date { font-size: 0.85rem; color: #888; }
-        .comm-content { line-height: 1.6; word-break: break-all; }
-        .comm-footer { margin-top: 15px; color: #888; font-size: 0.9rem; }
-    </style>
-</head>
-<body>
-    <header id="top-bar">
-        <div class="logo-small" onclick="location.href='/'"><h2>仙人Tube<sup>+</sup></h2></div>
-        <form action="/search" method="get" class="search-container">
-            <i class="fas fa-search"></i>
-            <input type="text" name="q" placeholder="検索..." autocomplete="off">
-        </form>
-        <div style="width: 40px;"></div>
+        .channel-actions {
+            width: 100%;
+        }
+
+        .video-grid {
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 16px 8px;
+            padding: 8px;
+        }
+
+        .shorts-grid {
+            grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+        }
+
+        .card-title {
+            font-size: 13px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="channel-page-wrapper">
+    <!-- チャンネルバナー (設定されている場合のみ表示) -->
+    {% if banner_url %}
+    <div class="channel-banner">
+        <img src="{{ banner_url }}" alt="チャンネルバナー" loading="lazy">
+    </div>
+    {% endif %}
+
+    <!-- チャンネルヘッダー -->
+    <header class="channel-header">
+        <div class="channel-avatar-wrapper">
+            <img src="{{ author_icon }}" class="channel-avatar" alt="{{ author }}" loading="lazy">
+        </div>
+        <div class="channel-info">
+            <div class="channel-name-row">
+                <h1 class="channel-title">{{ author }}</h1>
+            </div>
+            
+            <div class="channel-metadata">
+                {% if handle %}
+                <span>{{ handle }}</span>
+                <span class="metadata-dot">•</span>
+                {% endif %}
+                <span>チャンネル登録者数 {{ sub_count }}</span>
+                {% if video_count %}
+                <span class="metadata-dot">•</span>
+                <span>動画 {{ video_count }}本</span>
+                {% endif %}
+            </div>
+
+            {% if description %}
+            <div class="channel-description-preview" onclick="openAboutModal()">
+                <span class="description-text">{{ description|striptags }}</span>
+                <span class="material-symbols-outlined description-more-icon">chevron_right</span>
+            </div>
+            {% endif %}
+
+            <div class="channel-actions">
+                <button id="subscribe-btn" class="yt-sub-btn" onclick="toggleSubscribe('{{ ucid }}')">
+                    <span class="material-symbols-outlined" id="sub-icon" style="font-size: 18px; display: none;">notifications</span>
+                    <span id="sub-text">チャンネル登録</span>
+                </button>
+            </div>
+        </div>
     </header>
 
-    <div class="channel-header">
-        <img src="{{ author_icon }}" class="channel-icon" alt="icon">
-        <div class="channel-meta">
-            <h1>{{ author }}</h1>
-            <div class="sub-count">{{ sub_count }}</div>
-            <div class="desc-container">
-                <div id="channel-desc" class="desc-content">{{ description|safe }}</div>
-                <button id="desc-btn" class="desc-toggle" onclick="toggleDescription()">もっと見る</button>
-            </div>
-            <button id="subscribe-btn" class="sub-btn" onclick="toggleSubscribe('{{ ucid }}')">チャンネル登録</button>
-        </div>
+    <!-- タブ ナビゲーション -->
+    {% set ext_params = "" %}
+    {% if request.query_params.get("force_instance") %}
+        {% set ext_params = ext_params ~ "&force_instance=" ~ request.query_params.get("force_instance") %}
+    {% endif %}
+    {% if request.query_params.get("api") %}
+        {% set ext_params = ext_params ~ "&api=" ~ request.query_params.get("api") %}
+    {% endif %}
+
+    <div class="channel-tabs-container">
+        <nav class="channel-tabs">
+            <a href="/channel/{{ ucid }}?tab=videos{{ ext_params }}" class="tab-item {{ 'active' if tab == 'videos' or not tab else '' }}">動画</a>
+            <a href="/channel/{{ ucid }}?tab=shorts{{ ext_params }}" class="tab-item {{ 'active' if tab == 'shorts' else '' }}">Shorts</a>
+            <a href="/channel/{{ ucid }}?tab=playlists{{ ext_params }}" class="tab-item {{ 'active' if tab == 'playlists' else '' }}">再生リスト</a>
+            <a href="/channel/{{ ucid }}?tab=community{{ ext_params }}" class="tab-item {{ 'active' if tab == 'community' else '' }}">コミュニティ</a>
+        </nav>
     </div>
 
-    <nav class="channel-nav">
-        <a href="/channel/{{ ucid }}?tab=videos" class="nav-item {{ 'active' if tab == 'videos' else '' }}">動画</a>
-        <a href="/channel/{{ ucid }}?tab=shorts" class="nav-item {{ 'active' if tab == 'shorts' else '' }}">Shorts</a>
-        <a href="/channel/{{ ucid }}?tab=playlists" class="nav-item {{ 'active' if tab == 'playlists' else '' }}">再生リスト</a>
-        <a href="/channel/{{ ucid }}?tab=community" class="nav-item {{ 'active' if tab == 'community' else '' }}">コミュニティ</a>
-    </nav>
-
-    {% if tab == "videos" %}
-    <div style="max-width: 1200px; margin: 20px auto 0; padding: 0 20px;">
-        <select onchange="location.href='/channel/{{ ucid }}?tab=videos&sort_by=' + this.value" style="padding: 5px 10px; border-radius: 5px; background: var(--card-bg); color: var(--text-dark); border: 1px solid var(--border-color);">
-            <option value="newest" {{ 'selected' if sort_by == 'newest' else '' }}>最新順</option>
-            <option value="oldest" {{ 'selected' if sort_by == 'oldest' else '' }}>古い順</option>
-            <option value="popular" {{ 'selected' if sort_by == 'popular' else '' }}>人気順</option>
-        </select>
+    <!-- メインコンテンツ -->
+    {% if tab == "videos" or not tab %}
+    <!-- ソート選択バー -->
+    <div class="sort-chips-bar">
+        <a href="/channel/{{ ucid }}?tab=videos&sort_by=newest{{ ext_params }}" class="sort-chip {{ 'active' if sort_by == 'newest' or not sort_by else '' }}">最新順</a>
+        <a href="/channel/{{ ucid }}?tab=videos&sort_by=popular{{ ext_params }}" class="sort-chip {{ 'active' if sort_by == 'popular' else '' }}">人気順</a>
+        <a href="/channel/{{ ucid }}?tab=videos&sort_by=oldest{{ ext_params }}" class="sort-chip {{ 'active' if sort_by == 'oldest' else '' }}">古い順</a>
     </div>
-    <main class="container">
+
+    <main class="video-grid">
         {% for video in videos %}
-        <a href="/watch?v={{ video.videoId }}" class="video-card">
-            <div class="thumb-box">
-                <img class="thumb" src="/proxy/thumb?v={{ video.videoId }}" loading="lazy">
+        <a href="/watch?v={{ video.videoId }}" class="yt-card">
+            <div class="card-thumbnail-wrapper">
+                <img class="card-thumbnail" src="/proxy/thumb?v={{ video.videoId }}" loading="lazy" alt="{{ video.title }}">
+                {% if video.lengthSeconds %}
+                <span class="card-duration">{{ video.lengthText if video.lengthText else video.lengthSeconds }}</span>
+                {% endif %}
             </div>
-            <div class="v-title">{{ video.title }}</div>
-            <div class="v-meta">{{ video.viewCountText }} • {{ video.publishedText }}</div>
+            <div class="card-details">
+                <div class="card-title">{{ video.title }}</div>
+                <div class="card-metadata">
+                    {% if video.viewCountText %}{{ video.viewCountText }} • {% endif %}{{ video.publishedText }}
+                </div>
+            </div>
         </a>
         {% endfor %}
     </main>
 
     {% elif tab == "shorts" %}
-    <main class="container shorts-grid">
+    <main class="video-grid shorts-grid">
         {% for short in shorts %}
-        <a href="/shorts/{{ short.videoId }}" class="video-card">
-            <div class="thumb-box shorts-box">
-                <img class="thumb" src="/proxy/thumb?v={{ short.videoId }}" loading="lazy">
+        <a href="/shorts/{{ short.videoId }}" class="yt-card">
+            <div class="card-thumbnail-wrapper shorts-aspect">
+                <img class="card-thumbnail" src="/proxy/thumb?v={{ short.videoId }}" loading="lazy" alt="{{ short.title }}">
             </div>
-            <div class="v-title">{{ short.title }}</div>
-            <div class="v-meta">{{ short.viewCountText }}</div>
+            <div class="card-details">
+                <div class="card-title">{{ short.title }}</div>
+                {% if short.viewCountText %}
+                <div class="card-metadata">{{ short.viewCountText }}</div>
+                {% endif %}
+            </div>
         </a>
         {% endfor %}
     </main>
 
     {% elif tab == "playlists" %}
-    <main class="container">
+    <main class="video-grid">
         {% for pl in playlists %}
-        <a href="/playlist?list={{ pl.id }}" class="video-card">
-            <div class="thumb-box">
-                <img class="thumb" src="{{ pl.thumbnail }}" loading="lazy">
-                <div style="position: absolute; right: 0; top: 0; bottom: 0; width: 40%; background: rgba(0,0,0,0.7); display: flex; flex-direction: column; align-items: center; justify-content: center; color: white;">
-                    <i class="fas fa-list"></i>
-                    <span style="font-size: 1.2rem; font-weight: bold;">{{ pl.video_count }}</span>
-                </div>
+        <a href="/playlist?list={{ pl.id }}" class="yt-card">
+            <div class="card-thumbnail-wrapper">
+                <img class="card-thumbnail" src="{{ pl.thumbnail }}" loading="lazy" alt="{{ pl.title }}">
+                <span class="card-duration" style="display:flex; align-items:center; gap:4px;">
+                    <span class="material-symbols-outlined" style="font-size:14px;">playlist_play</span>
+                    {{ pl.video_count }}
+                </span>
             </div>
-            <div class="v-title">{{ pl.title }}</div>
+            <div class="card-details">
+                <div class="card-title">{{ pl.title }}</div>
+                <div class="card-metadata">再生リスト</div>
+            </div>
         </a>
         {% endfor %}
     </main>
 
     {% elif tab == "community" %}
-    <main class="comm-container">
+    <main style="max-width: 720px; margin: 16px auto; padding: 0 16px; display: flex; flex-direction: column; gap: 16px;">
         {% for post in community %}
-        <div class="comm-post">
-            <div class="comm-header">
-                <img src="{{ post.author_icon }}" class="comm-icon">
+        <div style="background-color: var(--yt-chip-bg); border: 1px solid var(--yt-border-color); border-radius: 12px; padding: 16px;">
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                <img src="{{ post.author_icon }}" style="width: 40px; height: 40px; border-radius: 50%;" alt="">
                 <div>
-                    <div class="comm-author">{{ post.author }}</div>
-                    <div class="comm-date">{{ post.published_text }}</div>
+                    <div style="font-weight: 600; font-size: 14px; color: var(--yt-text-primary);">{{ post.author }}</div>
+                    <div style="font-size: 12px; color: var(--yt-text-secondary);">{{ post.published_text }}</div>
                 </div>
             </div>
-            <div class="comm-content">{{ post.content|safe }}</div>
-            <div class="comm-footer">
-                <i class="far fa-thumbs-up"></i> {{ post.likes }}
+            <div style="font-size: 14px; color: var(--yt-text-primary); line-height: 1.5; word-break: break-word;">
+                {{ post.content|safe }}
             </div>
+            {% if post.likes is not none %}
+            <div style="margin-top: 12px; font-size: 13px; color: var(--yt-text-secondary); display: flex; align-items: center; gap: 6px;">
+                <span class="material-symbols-outlined" style="font-size: 18px;">thumb_up</span> {{ post.likes }}
+            </div>
+            {% endif %}
         </div>
         {% endfor %}
     </main>
     {% endif %}
+</div>
 
-    <script>
-        function toggleDescription() {
-            const desc = document.getElementById('channel-desc');
-            const btn = document.getElementById('desc-btn');
-            if (desc.classList.contains('expanded')) {
-                desc.classList.remove('expanded');
-                btn.innerText = 'もっと見る';
-            } else {
-                desc.classList.add('expanded');
-                btn.innerText = '一部を表示';
-            }
+<!-- 概要モーダル -->
+<div class="modal-overlay" id="aboutModal" onclick="closeAboutModal(event)">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-header">
+            <span>概要</span>
+            <button class="modal-close-btn" onclick="closeAboutModal()">
+                <span class="material-symbols-outlined">close</span>
+            </button>
+        </div>
+        <div style="font-size: 14px; line-height: 1.6; white-space: pre-wrap; color: var(--yt-text-primary);">
+            {{ description|safe }}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function openAboutModal() {
+        document.getElementById('aboutModal').style.display = 'flex';
+    }
+
+    function closeAboutModal(e) {
+        document.getElementById('aboutModal').style.display = 'none';
+    }
+
+    function updateSubscribeState(isSubscribed) {
+        const btn = document.getElementById('subscribe-btn');
+        const icon = document.getElementById('sub-icon');
+        const text = document.getElementById('sub-text');
+        if (!btn) return;
+
+        if (isSubscribed) {
+            btn.classList.add('subscribed');
+            icon.style.display = 'inline-block';
+            text.innerText = '登録済み';
+        } else {
+            btn.classList.remove('subscribed');
+            icon.style.display = 'none';
+            text.innerText = 'チャンネル登録';
         }
+    }
 
-        function toggleSubscribe(ucid) {
-            const btn = document.getElementById('subscribe-btn');
-            let subs = JSON.parse(localStorage.getItem('subscribed_channels') || '[]');
-            
-            if (subs.includes(ucid)) {
-                subs = subs.filter(id => id !== ucid);
-                btn.classList.remove('subscribed');
-                btn.innerText = 'チャンネル登録';
-            } else {
-                subs.push(ucid);
-                btn.classList.add('subscribed');
-                btn.innerText = '登録済み';
-            }
-            localStorage.setItem('subscribed_channels', JSON.stringify(subs));
+    function toggleSubscribe(ucid) {
+        if (!ucid) return;
+        let subs = JSON.parse(localStorage.getItem('subscribed_channels') || '[]');
+        const isSubscribed = subs.includes(ucid);
+
+        if (isSubscribed) {
+            subs = subs.filter(id => id !== ucid);
+        } else {
+            subs.push(ucid);
         }
+        localStorage.setItem('subscribed_channels', JSON.stringify(subs));
+        updateSubscribeState(!isSubscribed);
+    }
 
-        // 初期ロード時の購読状態反映
-        window.addEventListener('DOMContentLoaded', () => {
-            const btn = document.getElementById('subscribe-btn');
-            const ucid = '{{ ucid }}';
-            let subs = JSON.parse(localStorage.getItem('subscribed_channels') || '[]');
-            if (subs.includes(ucid)) {
-                btn.classList.add('subscribed');
-                btn.innerText = '登録済み';
-            }
-        });
-    </script>
-</body>
-</html>
+    window.addEventListener('DOMContentLoaded', () => {
+        const ucid = '{{ ucid }}';
+        if (ucid) {
+            const subs = JSON.parse(localStorage.getItem('subscribed_channels') || '[]');
+            updateSubscribeState(subs.includes(ucid));
+        }
+    });
+</script>
+{% endblock %}

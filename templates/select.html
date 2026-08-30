@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block title %}再生方法の選択 - 仙人Tube{% endblock %}
+
+{% block extra_css %}
+<style>
+    .select-container {
+        max-width: 600px;
+        margin: 60px auto;
+        padding: 32px;
+        background-color: var(--yt-search-bg);
+        border: 1px solid var(--yt-border-color);
+        border-radius: 16px;
+        text-align: center;
+    }
+
+    .select-title {
+        font-size: 22px;
+        font-weight: 700;
+        margin-bottom: 12px;
+        color: var(--yt-text-primary);
+    }
+
+    .select-subtitle {
+        font-size: 14px;
+        color: var(--yt-text-secondary);
+        margin-bottom: 32px;
+    }
+
+    .select-options {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    .select-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        padding: 16px 24px;
+        border-radius: 12px;
+        font-size: 16px;
+        font-weight: 500;
+        text-decoration: none;
+        transition: background-color 0.2s, transform 0.1s;
+    }
+
+    .select-btn-primary {
+        background-color: var(--yt-text-primary);
+        color: var(--yt-bg);
+    }
+
+    .select-btn-primary:hover {
+        opacity: 0.9;
+    }
+
+    .select-btn-secondary {
+        background-color: var(--yt-chip-bg);
+        color: var(--yt-text-primary);
+        border: 1px solid var(--yt-border-color);
+    }
+
+    .select-btn-secondary:hover {
+        background-color: var(--yt-hover-bg);
+    }
+
+    .select-btn .material-symbols-outlined {
+        font-size: 24px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="select-container glass-panel">
+    <h1 class="select-title">動画の再生方法を選択</h1>
+    <p class="select-subtitle">動画ID: {{ video_id }}</p>
+
+    <div class="select-options">
+        <a href="/watch?v={{ video_id }}" class="select-btn select-btn-primary">
+            <span class="material-symbols-outlined">play_circle</span>
+            <span>通常再生で開く</span>
+        </a>
+        <a href="/embed/{{ video_id }}" class="select-btn select-btn-secondary">
+            <span class="material-symbols-outlined">fit_screen</span>
+            <span>埋め込み再生ページで開く</span>
+        </a>
+    </div>
+</div>
+{% endblock %}

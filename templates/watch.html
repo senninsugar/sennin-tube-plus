@@ -1,687 +1,1620 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ video_title }} - 仙人Tube+</title>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
-    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-    <style>
-        :root {
-            --primary-color: #007bff;
-            --error-color: #ff4d4f;
-            --bg-light: #fdfdfd;
-            --text-dark: #333333;
-            --gray-logo: #555555;
-            --glass-bg: rgba(255, 255, 255, 0.85);
-            --card-bg: #ffffff;
-            --border-color: #e5e5e5;
-        }
-        @media (prefers-color-scheme: dark) {
-            :root {
-                --bg-light: #121212;
-                --text-dark: #e0e0e0;
-                --glass-bg: rgba(30, 30, 30, 0.85);
-                --card-bg: #252525;
-                --border-color: #333;
-            }
-        }
-        body { font-family: 'Noto Sans JP', sans-serif; margin: 0; background-color: var(--bg-light); color: var(--text-dark); padding-top: 80px; }
-        #top-bar {
-            position: fixed; top: 0; left: 0; width: 100%;
-            background-color: var(--glass-bg);
-            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-            z-index: 1000; padding: 12px 25px;
-            display: flex; align-items: center; justify-content: space-between;
-            box-shadow: 0 2px 15px rgba(0, 0, 0, 0.05);
-            box-sizing: border-box;
-        }
-        .logo-small h2 {
-            font-size: 1.5rem; color: var(--gray-logo); margin: 0; cursor: pointer;
-            font-weight: 700; letter-spacing: -1px;
-        }
-        .logo-small sup { color: var(--primary-color); font-size: 0.6em; }
-        .search-container {
-            position: relative; flex: 0 1 600px; margin: 0 20px;
-        }
-        .search-container input {
-            width: 100%; padding: 12px 20px 12px 45px;
-            border: 2px solid transparent; border-radius: 50px;
-            background: var(--card-bg); color: var(--text-dark);
-            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-            outline: none; transition: all 0.3s; box-sizing: border-box;
-        }
-        .search-container i {
-            position: absolute; left: 18px; top: 50%; transform: translateY(-50%);
-            color: #aaa;
-        }
-        .ui-autocomplete {
-            background: var(--glass-bg) !important;
-            backdrop-filter: blur(20px) !important;
-            border-radius: 15px !important;
-            border: 1px solid var(--border-color) !important;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.1) !important;
-            padding: 10px 0 !important;
-            font-family: 'Noto Sans JP', sans-serif !important;
-            z-index: 1100 !important;
-        }
-        .ui-menu-item-wrapper {
-            padding: 10px 20px !important;
-            color: var(--text-dark) !important;
-            transition: background 0.2s !important;
-        }
-        .ui-state-active {
-            background: var(--primary-color) !important;
-            color: #fff !important;
-            border: none !important;
-            margin: 0 !important;
-        }
-        #custom-alert {
-            position: fixed; top: 90px; right: 20px;
-            background: var(--glass-bg); backdrop-filter: blur(15px);
-            border-left: 5px solid var(--primary-color);
-            padding: 15px 25px; border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            z-index: 2000; display: none;
-            animation: slideIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        }
-        #custom-alert.error {
-            border-left-color: var(--error-color);
-        }
-        @keyframes slideIn {
-            from { opacity: 0; transform: translateX(100px); }
-            to { opacity: 1; transform: translateX(0); }
-        }
-        .watch-container {
-            display: grid; grid-template-columns: 2.3fr 1fr; gap: 30px;
-            max-width: 1700px; margin: 20px auto; padding: 0 30px;
-        }
-        .video-section { width: 100%; }
-        #player-wrapper {
-            position: relative;
-            width: 100%; aspect-ratio: 16/9; background: #000;
-            border-radius: 20px; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,0.15);
-        }
-        video { width: 100%; height: 100%; outline: none; }
-        iframe { width: 100%; height: 100%; border: none; }
-        .loader-overlay {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.4); display: none; align-items: center; justify-content: center;
-            z-index: 5; pointer-events: none;
-        }
-        .custom-loader {
-            width: 50px; height: 50px; border: 5px solid rgba(255,255,255,0.3);
-            border-radius: 50%; border-top-color: var(--primary-color);
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .video-details, .description-card, .comment-section {
-            background: var(--card-bg); border-radius: 20px; padding: 25px; margin-top: 20px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-        }
-        .video-title-watch { font-size: 1.3rem; font-weight: 700; margin: 0 0 15px; line-height: 1.4; }
-        .quality-selector { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
-        .custom-select-wrapper { position: relative; width: 220px; user-select: none; z-index: 100; }
-        .custom-select-trigger {
-            padding: 10px 15px; border-radius: 12px; border: 1px solid var(--border-color);
-            background: var(--card-bg); color: var(--text-dark); cursor: pointer;
-            display: flex; align-items: center; justify-content: space-between; font-size: 0.9rem;
-            transition: all 0.2s; box-shadow: 0 2px 5px rgba(0,0,0,0.03);
-        }
-        .custom-select-trigger:hover { border-color: var(--primary-color); }
-        .custom-options {
-            position: absolute; top: 110%; left: 0; right: 0;
-            background: var(--card-bg); border-radius: 12px; border: 1px solid var(--border-color);
-            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
-            display: none; flex-direction: column; overflow: hidden;
-            backdrop-filter: blur(10px);
-        }
-        .custom-select-wrapper.open .custom-options { display: flex; animation: fadeIn 0.2s; }
-        .custom-option {
-            padding: 12px 15px; cursor: pointer; font-size: 0.85rem; border-bottom: 1px solid var(--border-color);
-            transition: background 0.2s;
-        }
-        .custom-option:last-child { border-bottom: none; }
-        .custom-option:hover { background: var(--primary-color); color: #fff; }
-        .custom-option.selected { background: rgba(0, 123, 255, 0.1); color: var(--primary-color); font-weight: 700; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
-        .quality-btn {
-            background: rgba(0, 123, 255, 0.1); color: var(--primary-color);
-            border: none; padding: 8px 18px; border-radius: 50px; cursor: pointer;
-            font-weight: 700; font-size: 0.85rem; transition: all 0.2s;
-        }
-        .quality-btn:hover { background: var(--primary-color); color: #fff; transform: translateY(-2px); }
-        .stats-bar { display: flex; gap: 20px; color: #888; font-size: 0.9rem; margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 15px; }
-        .stats-bar i { margin-right: 5px; color: var(--primary-color); }
-        .channel-info { display: flex; align-items: center; gap: 15px; margin-top: 20px; text-decoration: none; color: inherit; transition: opacity 0.2s; }
-        .channel-info:hover { opacity: 0.8; }
-        .channel-info img { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; }
-        .channel-name { font-weight: 700; font-size: 1.1rem; }
-        .sub-count { font-size: 0.8rem; color: #888; }
-        .description-box { font-size: 0.95rem; line-height: 1.8; color: var(--text-dark); }
-        .comment-section h3 { margin-top: 0; margin-bottom: 20px; }
-        .comment-item { 
-            display: flex; gap: 15px; margin-bottom: 15px; 
-            background: rgba(0,0,0,0.02); padding: 15px; border-radius: 15px;
-            border: 1px solid var(--border-color);
-        }
-        @media (prefers-color-scheme: dark) {
-            .comment-item { background: rgba(255,255,255,0.03); }
-        }
-        .comment-item img { width: 40px; height: 40px; border-radius: 50%; }
-        .comment-author { font-weight: 700; font-size: 0.9rem; margin-bottom: 5px; }
-        .comment-text { font-size: 0.9rem; line-height: 1.5; }
-        .recommend-section { display: flex; flex-direction: column; gap: 15px; }
-        .recommend-card {
-            display: flex; gap: 12px; text-decoration: none; color: inherit;
-            transition: transform 0.2s;
-        }
-        .recommend-card:hover { transform: translateX(5px); }
-        .recommend-thumb { width: 160px; aspect-ratio: 16/9; border-radius: 12px; object-fit: cover; flex-shrink: 0; }
-        .recommend-title { font-size: 0.9rem; font-weight: 700; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-        .recommend-meta { font-size: 0.75rem; color: #888; margin-top: 5px; }
-        .info-card {
-            background: var(--card-bg); border-radius: 20px; padding: 25px; margin-top: 25px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-        }
-        .info-card h3 { margin: 0 0 15px; font-size: 1.1rem; }
-        .info-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        .info-btn {
-            background: rgba(0,0,0,0.05); color: var(--text-dark); border: none; padding: 12px;
-            border-radius: 10px; cursor: pointer; font-size: 0.85rem; font-weight: 700;
-            display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s;
-            text-decoration: none;
-        }
-        @media (prefers-color-scheme: dark) { .info-btn { background: rgba(255,255,255,0.08); } }
-        .info-btn:hover { background: var(--primary-color); color: #fff; transform: translateY(-2px); }
-        .modal-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.7); backdrop-filter: blur(5px);
-            z-index: 3000; display: none; align-items: center; justify-content: center;
-        }
-        .modal-content {
-            background: var(--card-bg); padding: 30px; border-radius: 25px;
-            max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto;
-            position: relative; animation: modalIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        }
-        @keyframes modalIn { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-        .modal-close { position: absolute; top: 20px; right: 20px; font-size: 1.5rem; cursor: pointer; color: #888; }
-        .dl-list-item {
-            display: flex; justify-content: space-between; align-items: center;
-            padding: 15px; border-bottom: 1px solid var(--border-color);
-        }
-        .dl-list-item:last-child { border: none; }
-        @media (max-width: 900px) {
-            .watch-container { grid-template-columns: 1fr; padding: 0 15px; }
-            .recommend-section { margin-top: 30px; }
-        }
+{% extends "base.html" %}
 
-        /* フローティングコントロールボタンのスタイル */
-        #floating-control {
-            position: fixed; bottom: 30px; right: 30px; z-index: 2000;
-            display: flex; flex-direction: column; align-items: flex-end; gap: 15px;
-        }
-        .control-trigger {
-            width: 60px; height: 60px; border-radius: 50%;
-            background: var(--primary-color); color: white;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 1.5rem; cursor: pointer; box-shadow: 0 8px 25px rgba(0,123,255,0.4);
-            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        }
-        .control-trigger:hover { transform: scale(1.1) rotate(90deg); }
-        .control-menu {
-            background: var(--glass-bg); backdrop-filter: blur(15px);
-            padding: 15px; border-radius: 20px; border: 1px solid var(--border-color);
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-            display: none; flex-direction: column; gap: 10px; min-width: 220px;
-            animation: slideInUp 0.3s ease;
-        }
-        @keyframes slideInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        .control-item {
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 10px 15px; border-radius: 12px; cursor: pointer;
-            font-size: 0.9rem; font-weight: 700; transition: all 0.2s;
-            background: rgba(0,0,0,0.03); color: var(--text-dark);
-        }
-        @media (prefers-color-scheme: dark) { .control-item { background: rgba(255,255,255,0.05); } }
-        .control-item:hover { background: rgba(0,123,255,0.1); }
-        .control-item.active { background: var(--primary-color); color: white; }
-        .control-item i { font-size: 1.1rem; }
-        .source-options { display: none; flex-direction: column; gap: 5px; padding-left: 10px; margin-top: -5px; }
-        .source-options.show { display: flex; }
-        .sub-item { font-size: 0.8rem; padding: 8px 12px; border-radius: 8px; background: rgba(0,0,0,0.05); }
-        @media (prefers-color-scheme: dark) { .sub-item { background: rgba(255,255,255,0.08); } }
-        .sub-item.selected { background: var(--primary-color); color: white; }
-    </style>
-</head>
-<body>
-    <header id="top-bar">
-        <div class="logo-small" onclick="location.href='/'"><h2>仙人Tube<sup>+</sup></h2></div>
-        <form action="/search" method="get" class="search-container">
-            <i class="fas fa-search"></i>
-            <input id="searchbox" type="search" name="q" placeholder="動画を検索..." autocomplete="off">
-        </form>
-        <div style="width: 40px;"></div>
-    </header>
+{% block title %}{{ video_title if video_title else "読み込み中..." }} - YouTube{% endblock %}
 
-    <div id="custom-alert">
-        <div style="display: flex; align-items: center; gap: 10px;">
-            <i id="alert-icon" class="fas fa-info-circle" style="color: var(--primary-color);"></i>
-            <span id="alert-text"></span>
-        </div>
-    </div>
+{% block extra_css %}
 
-    <div id="dl-modal" class="modal-overlay">
-        <div class="modal-content">
-            <i class="fas fa-times modal-close" onclick="closeModal()"></i>
-            <h2 style="margin-top:0;"><i class="fas fa-download" style="margin-right:10px; color:var(--primary-color);"></i>ダウンロード</h2>
-            <div id="dl-list">
-                {% for stream in streamUrls %}
-                <div class="dl-list-item">
-                    <div>
-                        <strong>{{ stream.resolution }}</strong> 
-                        <span style="color:#888; font-size:0.8rem; margin-left:5px;">({{ stream.format }})</span>
-                    </div>
-                    <a href="{{ stream.url }}" download class="quality-btn" style="text-decoration:none;">保存</a>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-    </div>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>  <style>  
+    :root {  
+        --yt-spec-base-background: #0f0f0f;  
+        --yt-spec-static-overlay-background-solid: #212121;  
+        --yt-spec-badge-chip-background: rgba(255, 255, 255, 0.1);  
+        --yt-spec-button-chip-hover: rgba(255, 255, 255, 0.2);  
+        --yt-spec-text-primary: #f1f1f1;  
+        --yt-spec-text-secondary: #aaaaaa;  
+        --yt-spec-brand-subscribe-bg: #f1f1f1;  
+        --yt-spec-brand-subscribe-text: #0f0f0f;  
+        --yt-spec-border-color: rgba(255, 255, 255, 0.1);  
+        --yt-brand-red: #ff0000;  
+        --yt-font-family: "Roboto", "Arial", sans-serif;  
+        --yt-skeleton-bg: linear-gradient(90deg, rgba(255,255,255,0.06) 25%, rgba(255,255,255,0.12) 37%, rgba(255,255,255,0.06) 63%);  
+        --yt-cp-bg: #181818;  
+        --yt-cp-card-bg: #272727;  
+        --yt-cp-btn-bg: #3f3f3f;  
+        --yt-cp-btn-hover: #555555;  
+        --yt-cp-border: rgba(255, 255, 255, 0.1);  
+        --yt-alert-bg: rgba(24, 24, 27, 0.95);  
+        --yt-alert-error-bg: rgba(45, 18, 18, 0.95);  
+    }  
+  
+    @media (prefers-color-scheme: light) {  
+        :root {  
+            --yt-spec-base-background: #ffffff;  
+            --yt-spec-static-overlay-background-solid: #ffffff;  
+            --yt-spec-badge-chip-background: rgba(0, 0, 0, 0.05);  
+            --yt-spec-button-chip-hover: rgba(0, 0, 0, 0.1);  
+            --yt-spec-text-primary: #0f0f0f;  
+            --yt-spec-text-secondary: #606060;  
+            --yt-spec-brand-subscribe-bg: #0f0f0f;  
+            --yt-spec-brand-subscribe-text: #ffffff;  
+            --yt-spec-border-color: #e5e5e5;  
+            --yt-skeleton-bg: linear-gradient(90deg, rgba(0,0,0,0.06) 25%, rgba(0,0,0,0.12) 37%, rgba(0,0,0,0.06) 63%);  
+            --yt-cp-bg: #ffffff;  
+            --yt-cp-card-bg: #f2f2f2;  
+            --yt-cp-btn-bg: #e5e5e5;  
+            --yt-cp-btn-hover: #d9d9d9;  
+            --yt-cp-border: #e5e5e5;  
+            --yt-alert-bg: rgba(255, 255, 255, 0.95);  
+            --yt-alert-error-bg: rgba(255, 235, 235, 0.95);  
+        }  
+    }  
+  
+    body {  
+        background-color: var(--yt-spec-base-background);  
+        color: var(--yt-spec-text-primary);  
+        font-family: var(--yt-font-family);  
+        margin: 0;  
+        padding: 0;  
+        -webkit-font-smoothing: antialiased;  
+    }  
+  
+    .yt-watch-page-container {  
+        display: grid;  
+        grid-template-columns: minmax(0, 1fr) 360px;  
+        gap: 8px;  
+        max-width: 1754px;  
+        margin: 0 auto;  
+        padding: 0 12px 0 12px;  
+        box-sizing: border-box;  
+    }  
+  
+    @media (max-width: 1200px) {  
+        .yt-watch-page-container {  
+            grid-template-columns: minmax(0, 1fr) 320px;  
+            gap: 8px;  
+            padding: 0 8px 0 8px;  
+        }  
+    }  
+  
+    @media (max-width: 1010px) {  
+        .yt-watch-page-container {  
+            grid-template-columns: 1fr;  
+            padding: 0;  
+        }  
+    }  
+  
+    .yt-primary-column {  
+        width: 100%;  
+        min-width: 0;  
+    }  
+  
+    #player-wrapper {  
+        position: relative;  
+        width: 100%;  
+        aspect-ratio: 16 / 9;  
+        background: #000;  
+        border-radius: 12px;  
+        overflow: hidden;  
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);  
+    }  
+  
+    @media (max-width: 1010px) {  
+        #player-wrapper {  
+            border-radius: 0;  
+        }  
+    }  
+  
+    video, iframe {  
+        width: 100%;  
+        height: 100%;  
+        border: none;  
+        outline: none;  
+        display: block;  
+    }  
+  
+    .loader-overlay {  
+        position: absolute;  
+        top: 0;  
+        left: 0;  
+        width: 100%;  
+        height: 100%;  
+        background: rgba(0, 0, 0, 0.7);  
+        display: none;  
+        align-items: center;  
+        justify-content: center;  
+        z-index: 10;  
+        backdrop-filter: blur(2px);  
+    }  
+  
+    .yt-spinner {  
+        width: 48px;  
+        height: 48px;  
+        border: 4px solid rgba(255, 255, 255, 0.2);  
+        border-radius: 50%;  
+        border-top-color: #ffffff;  
+        animation: yt-spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;  
+    }  
+  
+    @keyframes yt-spin { to { transform: rotate(360deg); } }  
+  
+    .yt-video-title {  
+        font-size: 1.25rem;  
+        font-weight: 700;  
+        line-height: 1.35;  
+        margin: 12px 0 8px 0;  
+        color: var(--yt-spec-text-primary);  
+        word-break: break-word;  
+        letter-spacing: -0.2px;  
+        text-align: left;  
+    }  
+  
+    @media (max-width: 1010px) {  
+        .yt-video-title, .yt-owner-actions-row, .yt-description-container, .yt-comments-container {  
+            padding-left: 12px;  
+            padding-right: 12px;  
+        }  
+    }  
+  
+    .yt-owner-actions-row {  
+        display: flex;  
+        justify-content: space-between;  
+        align-items: center;  
+        flex-wrap: wrap;  
+        gap: 12px;  
+        margin-bottom: 12px;  
+    }  
+  
+    .yt-owner-info {  
+        display: flex;  
+        align-items: center;  
+        gap: 12px;  
+    }  
+  
+    .yt-channel-avatar-link {  
+        display: block;  
+        width: 40px;  
+        height: 40px;  
+        border-radius: 50%;  
+        overflow: hidden;  
+        flex-shrink: 0;  
+        background-color: var(--yt-spec-border-color);  
+    }  
+  
+    .yt-channel-avatar-link img {  
+        width: 100%;  
+        height: 100%;  
+        object-fit: cover;  
+    }  
+  
+    .yt-channel-text {  
+        display: flex;  
+        flex-direction: column;  
+        justify-content: center;  
+        text-align: left;  
+    }  
+  
+    .yt-channel-name {  
+        font-size: 1rem;  
+        font-weight: 600;  
+        color: var(--yt-spec-text-primary);  
+        text-decoration: none;  
+        line-height: 1.2;  
+    }  
+  
+    .yt-channel-subscribers {  
+        font-size: 0.75rem;  
+        color: var(--yt-spec-text-secondary);  
+        margin-top: 2px;  
+    }  
+  
+    .yt-subscribe-btn {  
+        background-color: var(--yt-spec-brand-subscribe-bg);  
+        color: var(--yt-spec-brand-subscribe-text);  
+        font-size: 0.875rem;  
+        font-weight: 600;  
+        padding: 0 16px;  
+        height: 36px;  
+        border-radius: 18px;  
+        border: none;  
+        cursor: pointer;  
+        margin-left: 12px;  
+        display: inline-flex;  
+        align-items: center;  
+        justify-content: center;  
+        transition: background-color 0.2s, opacity 0.2s;  
+    }  
+  
+    .yt-subscribe-btn:hover {  
+        opacity: 0.9;  
+    }  
+  
+    .yt-actions-group {  
+        display: flex;  
+        align-items: center;  
+        gap: 8px;  
+        flex-wrap: wrap;  
+    }  
+  
+    .yt-like-dislike-group {  
+        display: inline-flex;  
+        align-items: center;  
+        height: 36px;  
+        border-radius: 18px;  
+        background-color: var(--yt-spec-badge-chip-background);  
+        overflow: hidden;  
+    }  
+  
+    .yt-like-btn, .yt-dislike-btn {  
+        display: inline-flex;  
+        align-items: center;  
+        gap: 6px;  
+        height: 100%;  
+        padding: 0 16px;  
+        background: transparent;  
+        color: var(--yt-spec-text-primary);  
+        font-size: 0.875rem;  
+        font-weight: 500;  
+        border: none;  
+        cursor: pointer;  
+        transition: background-color 0.2s;  
+    }  
+  
+    .yt-like-btn:hover, .yt-dislike-btn:hover {  
+        background-color: var(--yt-spec-button-chip-hover);  
+    }  
+  
+    .yt-like-dislike-divider {  
+        width: 1px;  
+        height: 20px;  
+        background-color: var(--yt-spec-border-color);  
+    }  
+  
+    .yt-pill-button {  
+        display: inline-flex;  
+        align-items: center;  
+        gap: 6px;  
+        height: 36px;  
+        padding: 0 16px;  
+        border-radius: 18px;  
+        background-color: var(--yt-spec-badge-chip-background);  
+        color: var(--yt-spec-text-primary);  
+        font-size: 0.875rem;  
+        font-weight: 500;  
+        border: none;  
+        cursor: pointer;  
+        text-decoration: none;  
+        transition: background-color 0.2s;  
+        box-sizing: border-box;  
+        white-space: nowrap;  
+    }  
+  
+    .yt-pill-button:hover {  
+        background-color: var(--yt-spec-button-chip-hover);  
+    }  
+  
+    .yt-description-container {  
+        background-color: var(--yt-spec-badge-chip-background);  
+        border-radius: 12px;  
+        padding: 12px;  
+        font-size: 0.875rem;  
+        line-height: 1.5;  
+        color: var(--yt-spec-text-primary);  
+        transition: background-color 0.2s;  
+        margin-bottom: 24px;  
+        text-align: left;  
+    }  
+  
+    .yt-description-container:hover {  
+        background-color: var(--yt-spec-button-chip-hover);  
+    }  
+  
+    .yt-description-container.collapsed .yt-description-body {  
+        display: -webkit-box;  
+        -webkit-line-clamp: 3;  
+        -webkit-box-orient: vertical;  
+        overflow: hidden;  
+    }  
+  
+    .yt-description-toggle-btn {  
+        background: none;  
+        border: none;  
+        color: var(--yt-spec-text-primary);  
+        font-weight: 700;  
+        cursor: pointer;  
+        padding: 0;  
+        margin-top: 8px;  
+        font-size: 0.875rem;  
+        display: inline-block;  
+    }  
+  
+    .yt-description-header {  
+        font-weight: 600;  
+        margin-bottom: 6px;  
+        display: flex;  
+        justify-content: space-between;  
+        align-items: center;  
+        gap: 12px;  
+        text-align: left;  
+        flex-wrap: wrap;  
+    }  
+  
+    .yt-api-badge {  
+        font-size: 0.75rem;  
+        color: var(--yt-spec-text-secondary);  
+        background: rgba(255, 255, 255, 0.08);  
+        padding: 2px 8px;  
+        border-radius: 4px;  
+        border: 1px solid var(--yt-spec-border-color);  
+    }  
+  
+    .yt-description-body {  
+        white-space: pre-wrap;  
+        word-break: break-word;  
+        text-align: left;  
+        margin: 0;  
+        padding: 0;  
+    }  
+  
+    .skeleton-box {  
+        background: var(--yt-skeleton-bg);  
+        background-size: 400% 100%;  
+        animation: skeleton-shimmer 1.5s ease-in-out infinite;  
+        border-radius: 6px;  
+    }  
+  
+    @keyframes skeleton-shimmer {  
+        0% { background-position: 100% 0; }  
+        100% { background-position: -100% 0; }  
+    }  
+  
+    .skeleton-text {  
+        height: 14px;  
+        margin-bottom: 6px;  
+        border-radius: 4px;  
+    }  
+  
+    .yt-recommend-skeleton-card {  
+        display: flex;  
+        gap: 8px;  
+        padding: 4px;  
+        margin-bottom: 8px;  
+    }  
+  
+    .yt-recommend-skeleton-thumb {  
+        width: 168px;  
+        aspect-ratio: 16 / 9;  
+        border-radius: 8px;  
+        flex-shrink: 0;  
+    }  
+  
+    .yt-recommend-skeleton-info {  
+        flex: 1;  
+        display: flex;  
+        flex-direction: column;  
+        gap: 6px;  
+    }  
+  
+    .yt-secondary-column {  
+        display: flex;  
+        flex-direction: column;  
+        gap: 8px;  
+    }  
+  
+    .yt-recommend-card {  
+        display: flex;  
+        gap: 8px;  
+        text-decoration: none;  
+        color: inherit;  
+        border-radius: 8px;  
+        padding: 4px;  
+        transition: background-color 0.15s ease;  
+    }  
+  
+    .yt-recommend-card:hover {  
+        background-color: var(--yt-spec-button-chip-hover);  
+    }  
+  
+    .yt-recommend-thumb-wrapper {  
+        position: relative;  
+        width: 168px;  
+        aspect-ratio: 16 / 9;  
+        border-radius: 8px;  
+        overflow: hidden;  
+        flex-shrink: 0;  
+        background-color: #000;  
+    }  
+  
+    .yt-recommend-thumb {  
+        width: 100%;  
+        height: 100%;  
+        object-fit: cover;  
+    }  
+  
+    .yt-recommend-details {  
+        display: flex;  
+        flex-direction: column;  
+        gap: 4px;  
+        min-width: 0;  
+        text-align: left;  
+    }  
+  
+    .yt-recommend-title {  
+        font-size: 0.875rem;  
+        font-weight: 500;  
+        line-height: 1.3;  
+        color: var(--yt-spec-text-primary);  
+        display: -webkit-box;  
+        -webkit-line-clamp: 2;  
+        -webkit-box-orient: vertical;  
+        overflow: hidden;  
+    }  
+  
+    .yt-recommend-meta {  
+        font-size: 0.75rem;  
+        color: var(--yt-spec-text-secondary);  
+        line-height: 1.3;  
+    }  
+  
+    .yt-custom-select {  
+        position: relative;  
+        display: inline-block;  
+    }  
+  
+    .yt-select-dropdown {  
+        position: absolute;  
+        top: calc(100% + 6px);  
+        right: 0;  
+        background: var(--yt-spec-static-overlay-background-solid);  
+        border-radius: 12px;  
+        border: 1px solid var(--yt-spec-border-color);  
+        box-shadow: 0 8px 24px rgba(0,0,0,0.5);  
+        display: none;  
+        flex-direction: column;  
+        min-width: 200px;  
+        z-index: 500;  
+        overflow: hidden;  
+    }  
+  
+    .yt-custom-select.open .yt-select-dropdown {  
+        display: flex;  
+        animation: cpFadeIn 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards;  
+    }  
+  
+    .yt-dropdown-item {  
+        padding: 10px 16px;  
+        font-size: 0.85rem;  
+        color: var(--yt-spec-text-primary);  
+        cursor: pointer;  
+        transition: background 0.2s;  
+        text-align: left;  
+    }  
+  
+    .yt-dropdown-item:hover, .yt-dropdown-item.selected {  
+        background: var(--yt-spec-button-chip-hover);  
+    }  
+  
+    .yt-dropdown-section {  
+        padding: 8px 0;  
+        border-bottom: 1px solid var(--yt-spec-border-color);  
+        text-align: left;  
+    }  
+  
+    .yt-dropdown-section:last-child {  
+        border-bottom: none;  
+    }  
+  
+    .yt-dropdown-label {  
+        padding: 6px 16px;  
+        font-size: 0.7rem;  
+        font-weight: 600;  
+        color: var(--yt-spec-text-secondary);  
+        text-transform: uppercase;  
+        letter-spacing: 0.5px;  
+    }  
+  
+    .yt-dropdown-value {  
+        padding: 6px 16px;  
+        font-size: 0.75rem;  
+        color: var(--yt-spec-text-primary);  
+        word-break: break-all;  
+    }  
+  
+    .yt-modal-overlay {  
+        position: fixed;  
+        top: 0; left: 0; width: 100%; height: 100%;  
+        background: rgba(0, 0, 0, 0.7);  
+        z-index: 3000;  
+        display: none;  
+        align-items: center;  
+        justify-content: center;  
+        backdrop-filter: blur(4px);  
+    }  
+  
+    .yt-modal-content {  
+        background: var(--yt-spec-static-overlay-background-solid);  
+        color: var(--yt-spec-text-primary);  
+        padding: 24px;  
+        border-radius: 12px;  
+        max-width: 480px;  
+        width: 90%;  
+        position: relative;  
+        box-shadow: 0 12px 32px rgba(0,0,0,0.4);  
+        border: 1px solid var(--yt-spec-border-color);  
+        text-align: left;  
+    }  
+  
+    .yt-modal-close {  
+        position: absolute;  
+        top: 16px;  
+        right: 16px;  
+        font-size: 1.2rem;  
+        cursor: pointer;  
+        color: var(--yt-spec-text-secondary);  
+    }  
+  
+    #custom-alert {  
+        position: fixed;  
+        top: 24px;  
+        right: 24px;  
+        background: var(--yt-alert-bg);  
+        color: var(--yt-spec-text-primary);  
+        padding: 18px 24px;  
+        border-radius: 16px;  
+        box-shadow: 0 16px 36px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.2);  
+        z-index: 4000;  
+        display: block;  
+        font-size: 0.98rem;  
+        font-weight: 600;  
+        border: 1px solid var(--yt-spec-border-color);  
+        backdrop-filter: blur(12px);  
+        transform: translateY(-20px) scale(0.92);  
+        opacity: 0;  
+        visibility: hidden;  
+        pointer-events: none;  
+        transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s ease, visibility 0.3s step-end;  
+        touch-action: pan-y;  
+        user-select: none;  
+        max-width: 400px;  
+        width: calc(100% - 48px);  
+        word-break: break-word;  
+        box-sizing: border-box;  
+    }  
+  
+    #custom-alert.show {  
+        visibility: visible;  
+        pointer-events: auto;  
+        transform: translateY(0) scale(1);  
+        opacity: 1;  
+        transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s ease, visibility 0s;  
+    }  
+  
+    #custom-alert.hiding {  
+        visibility: visible;  
+        pointer-events: none;  
+        transform: translateY(-15px) scale(0.95);  
+        opacity: 0;  
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease, visibility 0.3s step-end;  
+    }  
+  
+    #custom-alert.swiping {  
+        transition: none !important;  
+    }  
+  
+    #custom-alert.error {  
+        border: 2px solid #ff4d4d !important;  
+        background: var(--yt-alert-error-bg);  
+    }  
+  
+    #floating-control {  
+        position: fixed;  
+        bottom: 24px;  
+        right: 24px;  
+        z-index: 2500;  
+        display: flex;  
+    }  
+  
+    .yt-control-trigger {  
+        width: 48px;  
+        height: 48px;  
+        border-radius: 50%;  
+        background: var(--yt-spec-static-overlay-background-solid);  
+        border: 1px solid var(--yt-spec-border-color);  
+        color: var(--yt-spec-text-primary);  
+        display: flex;  
+        align-items: center;  
+        justify-content: center;  
+        font-size: 1.1rem;  
+        cursor: pointer;  
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);  
+        transition: transform 0.2s;  
+    }  
+  
+    .yt-control-trigger:hover { transform: scale(1.05); }  
+  
+    #controlPanel {  
+        display: none;  
+        position: fixed;  
+        bottom: 20px;  
+        right: 20px;  
+        width: 440px;  
+        height: 520px;  
+        background: var(--yt-cp-bg);  
+        border: 1px solid var(--yt-cp-border);  
+        border-radius: 16px;  
+        z-index: 2600;  
+        box-shadow: 0 12px 40px rgba(0,0,0,.4);  
+        overflow: hidden;  
+        flex-direction: column;  
+        opacity: 0;  
+        transform: translateY(20px) scale(0.95);  
+        transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);  
+        pointer-events: none;  
+    }  
+  
+    #controlPanel.open {  
+        display: flex;  
+        animation: cpSlideUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;  
+        pointer-events: auto;  
+    }  
+  
+    @keyframes cpSlideUp {  
+        0% {  
+            opacity: 0;  
+            transform: translateY(30px) scale(0.9);  
+        }  
+        100% {  
+            opacity: 1;  
+            transform: translateY(0) scale(1);  
+        }  
+    }  
+  
+    @keyframes cpFadeIn {  
+        0% {  
+            opacity: 0;  
+            transform: translateY(-8px);  
+        }  
+        100% {  
+            opacity: 1;  
+            transform: translateY(0);  
+        }  
+    }  
+  
+    .cp-header { display: flex; align-items: center; padding: 14px 16px 0; gap: 8px; flex-shrink: 0; }  
+    .cp-title { font-size: 16px; font-weight: 600; flex: 1; color: var(--yt-spec-text-primary); }  
+    .cp-close { background: none; border: none; color: var(--yt-spec-text-secondary); font-size: 24px; cursor: pointer; line-height: 1; }  
+    .cp-close:hover { color: var(--yt-spec-text-primary); }  
+  
+    .cp-tabs { display: flex; gap: 4px; padding: 10px 16px 0; flex-shrink: 0; }  
+    .cp-tab { padding: 8px 16px; border-radius: 20px; border: none; background: var(--yt-cp-card-bg); color: var(--yt-spec-text-secondary); font-size: 14px; cursor: pointer; transition: background 0.15s, color 0.15s; }  
+    .cp-tab.active { background: var(--yt-spec-text-primary); color: var(--yt-spec-base-background); font-weight: 600; }  
+  
+    .cp-slide-wrap { flex: 1; overflow: hidden; position: relative; }  
+    .cp-slide-track { display: flex; height: 100%; transition: transform 0.25s cubic-bezier(0.4,0,0.2,1); }  
+    .cp-slide-page { min-width: 100%; height: 100%; overflow-y: auto; padding: 14px 16px 18px; box-sizing: border-box; }  
+  
+    .cp-card { background: var(--yt-cp-card-bg); border-radius: 12px; padding: 14px; margin-bottom: 10px; }  
+    .cp-card-title { font-size: 12px; color: var(--yt-spec-text-secondary); margin-bottom: 10px; text-transform: uppercase; letter-spacing: .6px; font-weight: 600; }  
+  
+    .cp-btn { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 11px 14px; border-radius: 10px; border: none; background: var(--yt-cp-btn-bg); color: var(--yt-spec-text-primary); font-size: 15px; cursor: pointer; margin-bottom: 8px; text-align: left; }  
+    .cp-btn:hover { background: var(--yt-cp-btn-hover); }  
+    .cp-btn-left { display: flex; align-items: center; gap: 10px; }  
+    .cp-btn:last-child { margin-bottom: 0; }  
+  
+    .cp-toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; font-size: 15px; color: var(--yt-spec-text-primary); }  
+    .cp-toggle-row + .cp-toggle-row { border-top: 1px solid var(--yt-cp-border); }  
+  
+    .toggle-switch { position: relative; width: 46px; height: 26px; flex-shrink: 0; }  
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }  
+    .toggle-switch .slider { position: absolute; inset: 0; background: var(--yt-cp-btn-hover); border-radius: 26px; cursor: pointer; transition: background 0.2s; }  
+    .toggle-switch .slider:before { content: ""; position: absolute; width: 20px; height: 20px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: transform 0.2s; }  
+    .toggle-switch input:checked + .slider { background: #1a73e8; }  
+    .toggle-switch input:checked + .slider:before { transform: translateX(20px); }  
+  
+    .cp-select { width: 100%; padding: 10px 12px; border-radius: 10px; background: var(--yt-cp-btn-bg); color: var(--yt-spec-text-primary); border: 1px solid transparent; font-size: 14px; margin-bottom: 8px; outline: none; }  
+    .cp-select:focus { border-color: #1a73e8; }  
+  
+    .cp-mode-card { display: flex; align-items: flex-start; gap: 12px; background: var(--yt-cp-card-bg); border-radius: 12px; padding: 14px; margin-bottom: 8px; cursor: pointer; border: 2px solid transparent; transition: border-color 0.15s, background-color 0.15s; }  
+    .cp-mode-card:hover { background: var(--yt-cp-btn-bg); }  
+    .cp-mode-card.selected { border-color: #1a73e8; }  
+    .cp-mode-card input[type=radio] { margin-top: 2px; flex-shrink: 0; accent-color: #1a73e8; width: 16px; height: 16px; }  
+    .cp-mode-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; color: var(--yt-spec-text-primary); }  
+    .cp-mode-desc { font-size: 13px; color: var(--yt-spec-text-secondary); line-height: 1.5; }  
+  
+    @media (max-width: 900px) {  
+        #controlPanel { width: calc(100vw - 32px); right: 16px; bottom: 16px; height: 480px; }  
+    }  
+  
+    .yt-api-status {  
+        display: inline-block;  
+        width: 8px;  
+        height: 8px;  
+        border-radius: 50%;  
+        margin-right: 6px;  
+        animation: pulse-status 2s ease-in-out infinite;  
+    }  
+  
+    .yt-api-status.active { background: #4CAF50; }  
+    .yt-api-status.loading { background: #FFC107; animation: pulse-loading 1s ease-in-out infinite; }  
+    .yt-api-status.error { background: #F44336; }  
+  
+    @keyframes pulse-status { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }  
+    @keyframes pulse-loading { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }  
+  
+    .yt-playlist-panel {  
+        background-color: var(--yt-spec-badge-chip-background);  
+        border: 1px solid var(--yt-spec-border-color);  
+        border-radius: 12px;  
+        padding: 12px;  
+        margin-bottom: 12px;  
+        display: flex;  
+        flex-direction: column;  
+        gap: 8px;  
+        max-height: 400px;  
+        overflow-y: auto;  
+    }  
+  
+    .yt-playlist-panel-header {  
+        font-size: 0.9rem;  
+        font-weight: 700;  
+        padding-bottom: 8px;  
+        border-bottom: 1px solid var(--yt-spec-border-color);  
+        color: var(--yt-spec-text-primary);  
+        display: flex;  
+        justify-content: space-between;  
+        align-items: center;  
+    }  
+  
+    .yt-playlist-panel-close {  
+        cursor: pointer;  
+        font-size: 1rem;  
+        color: var(--yt-spec-text-secondary);  
+        padding: 2px 6px;  
+        border-radius: 50%;  
+        transition: background-color 0.2s, color 0.2s;  
+        display: inline-flex;  
+        align-items: center;  
+        justify-content: center;  
+    }  
+  
+    .yt-playlist-panel-close:hover {  
+        background-color: var(--yt-spec-button-chip-hover);  
+        color: var(--yt-spec-text-primary);  
+    }  
+  
+    .yt-playlist-panel-item {  
+        display: flex;  
+        gap: 8px;  
+        align-items: center;  
+        text-decoration: none;  
+        color: inherit;  
+        padding: 6px;  
+        border-radius: 8px;  
+        transition: background-color 0.15s ease;  
+    }  
+  
+    .yt-playlist-panel-item:hover {  
+        background-color: var(--yt-spec-button-chip-hover);  
+    }  
+  
+    .yt-playlist-panel-item.active {  
+        background-color: var(--yt-spec-button-chip-hover);  
+        border-left: 3px solid var(--yt-brand-red);  
+    }  
+  
+    .yt-playlist-panel-num {  
+        font-size: 0.75rem;  
+        color: var(--yt-spec-text-secondary);  
+        width: 18px;  
+        text-align: center;  
+        flex-shrink: 0;  
+    }  
+  
+    .yt-playlist-panel-thumb-wrapper {  
+        width: 80px;  
+        aspect-ratio: 16 / 9;  
+        border-radius: 4px;  
+        overflow: hidden;  
+        flex-shrink: 0;  
+        background-color: #000;  
+    }  
+  
+    .yt-playlist-panel-thumb {  
+        width: 100%;  
+        height: 100%;  
+        object-fit: cover;  
+    }  
+  
+    .yt-playlist-panel-details {  
+        display: flex;  
+        flex-direction: column;  
+        gap: 2px;  
+        min-width: 0;  
+        text-align: left;  
+    }  
+  
+    .yt-playlist-panel-title {  
+        font-size: 0.8rem;  
+        font-weight: 500;  
+        line-height: 1.2;  
+        color: var(--yt-spec-text-primary);  
+        display: -webkit-box;  
+        -webkit-line-clamp: 2;  
+        -webkit-box-orient: vertical;  
+        overflow: hidden;  
+    }  
+  
+    .yt-playlist-panel-author {  
+        font-size: 0.7rem;  
+        color: var(--yt-spec-text-secondary);  
+    }  
+</style>  {% endblock %}
 
-    <div id="floating-control">
-        <div class="control-menu" id="ctrlMenu">
-            <div class="control-item" onclick="toggleLoop(this)">
-                <span>ループ再生</span><i class="fas fa-redo"></i>
-            </div>
-            <div class="control-item" onclick="toggleMute(this)">
-                <span>音声ミュート</span><i class="fas fa-volume-mute"></i>
-            </div>
-            <div class="control-item" onclick="openQualityFromCtrl()">
-                <span>画質選択</span><i class="fas fa-sliders-h"></i>
-            </div>
-            <div class="control-item" id="sourceToggle" onclick="toggleSourceOptions()">
-                <span>YouTube切替</span><i class="fab fa-youtube"></i>
-            </div>
-            <div class="source-options" id="srcOpts">
-                <div class="sub-item" id="src-nocookie" onclick="setExternalSource('nocookie')">NoCookie</div>
-                <div class="sub-item" id="src-edu" onclick="setExternalSource('edu')">Education</div>
-                <div class="sub-item selected" id="src-stream" onclick="setExternalSource('stream')">解除 (Stream)</div>
-            </div>
-        </div>
-        <div class="control-trigger" onclick="toggleControlMenu()">
-            <i class="fas fa-cog"></i>
-        </div>
-    </div>
+{% block content %}
+<div id="custom-alert">
+<div style="display: flex; align-items: center; gap: 10px;">
+<i id="alert-icon" class="fas fa-info-circle"></i>
+<span id="alert-text"></span>
+</div>
+</div>
 
-    <main class="watch-container">
-        <div class="video-section">
-            <div id="player-wrapper">
-                <div id="loader" class="loader-overlay"><div class="custom-loader"></div></div>
-                <video id="video-player" controls autoplay poster="/thumbnail?v={{ videoid }}" src="{{ videourls[0] }}">
-                    ブラウザが動画再生に対応していません。
-                </video>
-                <audio id="audio-sync" style="display:none;"></audio>
-                <div id="iframe-container" style="display:none; width:100%; height:100%;"></div>
-            </div>
+<div id="dl-modal" class="yt-modal-overlay">  
+    <div class="yt-modal-content">  
+        <i class="fas fa-times yt-modal-close" onclick="closeModal()"></i>  
+        <h3 style="margin-top:0; font-size:1.1rem; margin-bottom:16px;">  
+            <i class="fas fa-download" style="margin-right:8px; color:var(--yt-brand-red);"></i>動画を保存  
+        </h3>  
+        <div id="dl-list">  
+            {% for stream in streamUrls %}  
+            <div class="yt-dl-item" style="display:flex; justify-content:space-between; align-items:center; padding: 10px 0; border-bottom: 1px solid var(--yt-spec-border-color);">  
+                <div>  
+                    <strong style="font-size:0.9rem;">{{ stream.resolution }}</strong>   
+                    <span style="color:var(--yt-spec-text-secondary); font-size:0.8rem; margin-left:4px;">({{ stream.format }})</span>  
+                </div>  
+                <a href="{{ stream.url }}" download class="yt-pill-button" style="height:32px; padding:0 12px; font-size:0.8rem;">ダウンロード</a>  
+            </div>  
+            {% endfor %}  
+        </div>  
+    </div>  
+</div>  
 
-            <div class="video-details">
-                <h1 class="video-title-watch">{{ video_title }}</h1>
-                <div class="stats-bar">
-                    <span><i class="fas fa-eye"></i> {{ view_count }} 回視聴</span>
-                    <span><i class="fas fa-thumbs-up"></i> {{ like_count }}</span>
-                </div>
-                
-                <div class="quality-selector">
-                    <span style="font-size: 0.8rem; color: #888;">画質を選択:</span>
-                    <div class="custom-select-wrapper" id="qualitySelect">
-                        <div class="custom-select-trigger">
-                            <span>自動 (デフォルト)</span>
-                            <i class="fas fa-chevron-down"></i>
-                        </div>
-                        <div class="custom-options">
-                            <div class="custom-option selected" data-value="{{ videourls[0] }}" data-audio="">自動 (デフォルト)</div>
-                            {% for stream in streamUrls %}
-                            <div class="custom-option" 
-                                 data-value="{{ stream.url }}" 
-                                 data-audio="{{ stream.audioUrl or '' }}">
-                                {{ stream.resolution }} ({{ stream.format }})
-                            </div>
-                            {% endfor %}
-                            <div class="custom-option" data-type="m3u8" data-value="{{ youtube_url }}">HLS (m3u8)</div>
-                        </div>
-                    </div>
-                </div>
+<div id="floating-control">  
+    <div class="yt-control-trigger" onclick="toggleControlPanel()">  
+        <i class="fas fa-cog"></i>  
+    </div>  
+</div>  
 
-                <a href="/channel/{{ author_id }}" class="channel-info">
-                    <img src="{{ author_icon }}" alt="icon">
-                    <div>
-                        <div class="channel-name">{{ author }}</div>
-                        <div class="sub-count">登録者数 {{ subscribers_count }}</div>
-                    </div>
-                </a>
-            </div>
+<div id="controlPanel">  
+    <div class="cp-header">  
+        <div class="cp-title">コントロールパネル</div>  
+        <button class="cp-close" onclick="toggleControlPanel()">&times;</button>  
+    </div>  
+    <div class="cp-tabs">  
+        <button class="cp-tab active" onclick="switchCpTab(0)">再生</button>  
+        <button class="cp-tab" onclick="switchCpTab(1)">ソース</button>  
+        <button class="cp-tab" onclick="switchCpTab(2)">API</button>  
+    </div>  
+    <div class="cp-slide-wrap">  
+        <div class="cp-slide-track" id="cpSlideTrack">  
+            <div class="cp-slide-page">  
+                <div class="cp-card">  
+                    <div class="cp-card-title">プレイヤーコントロール</div>  
+                    <div class="cp-toggle-row">  
+                        <span>ループ再生</span>  
+                        <label class="toggle-switch">  
+                            <input type="checkbox" id="cpLoopToggle" onchange="toggleLoopSwitch(this.checked)">  
+                            <span class="slider"></span>  
+                        </label>  
+                    </div>  
+                    <div class="cp-toggle-row">  
+                        <span>音声ミュート</span>  
+                        <label class="toggle-switch">  
+                            <input type="checkbox" id="cpMuteToggle" onchange="toggleMuteSwitch(this.checked)">  
+                            <span class="slider"></span>  
+                        </label>  
+                    </div>  
+                </div>  
+                <div class="cp-card">  
+                    <div class="cp-card-title">画質設定</div>  
+                    <button class="cp-btn" onclick="openQualityDropdownFromCp()">  
+                        <span class="cp-btn-left"><i class="fas fa-sliders-h"></i> <span id="cpCurrentQualityText">画質を選択...</span></span>  
+                        <i class="fas fa-chevron-right" style="font-size:12px; color:#aaa;"></i>  
+                    </button>  
+                </div>  
+            </div>  
 
-            <div class="description-card">
-                <h3 style="margin-top:0; font-size: 1.1rem;"><i class="fas fa-align-left" style="margin-right:8px; color:var(--primary-color);"></i>概要欄</h3>
-                <div class="description-box">{{ description | safe }}</div>
-            </div>
+            <div class="cp-slide-page">  
+                <div class="cp-card-title" style="margin-bottom:8px;">埋め込み・再生モード</div>  
+                <div class="cp-mode-card selected" id="cp-mode-card-stream" onclick="selectSourceMode('stream')">  
+                    <input type="radio" name="srcMode" id="cp-src-stream" checked>  
+                    <div>  
+                        <div class="cp-mode-title">Stream (デフォルト)</div>  
+                        <div class="cp-mode-desc">標準のストリーミングプレイヤーで再生します。</div>  
+                    </div>  
+                </div>  
+                <div class="cp-mode-card" id="cp-mode-card-nocookie" onclick="selectSourceMode('nocookie')">  
+                    <input type="radio" name="srcMode" id="cp-src-nocookie">  
+                    <div>  
+                        <div class="cp-mode-title">YouTube NoCookie</div>  
+                        <div class="cp-mode-desc">youtube-nocookie.com の埋め込みプレイヤーを使用します。</div>  
+                    </div>  
+                </div>  
+                <div class="cp-mode-card" id="cp-mode-card-edu" onclick="selectSourceMode('edu')">  
+                    <input type="radio" name="srcMode" id="cp-src-edu">  
+                    <div>  
+                        <div class="cp-mode-title">YouTube Education</div>  
+                        <div class="cp-mode-desc">標準のYouTube Embedプレーヤーを使用します。</div>  
+                    </div>  
+                </div>  
+            </div>  
 
-            <div class="comment-section">
-                <h3 style="border-bottom: 2px solid var(--primary-color); display: inline-block; padding-bottom: 5px;">コメント</h3>
-                <div id="comment-list">
-                    {% for c in comments %}
-                    <div class="comment-item">
-                        <img src="{{ c.authorThumbnails[-1].url if c.authorThumbnails else '' }}" alt="u">
-                        <div>
-                            <div class="comment-author">{{ c.author }} • {{ c.publishedText }}</div>
-                            <div class="comment-text">{{ c.contentHtml | safe }}</div>
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
-        </div>
+            <div class="cp-slide-page">  
+                <div class="cp-card">  
+                    <div class="cp-card-title">ストリーム取得 API</div>  
+                    <select class="cp-select" id="cpStreamApiSelect" onchange="applyStreamApiChange(this.value)">  
+                        <option value="">自動選択</option>  
+                        <option value="sia">Sia API</option>  
+                        <option value="piped">Piped API</option>  
+                        <option value="rapidapi">RapidAPI</option>  
+                        <option value="zernio">Zernio API</option>  
+                        <option value="invidious">Invidious API</option>  
+                        <option value="sennin">Sennin API</option>  
+                    </select>  
+                </div>  
 
-        <div class="recommend-section">
-            <h3 style="margin: 0 0 10px; font-size: 1.1rem;">関連動画</h3>
-            {% for v in recommended_videos %}
-            <a href="/watch?v={{ v.video_id }}" class="recommend-card">
-                <img src="/thumbnail?v={{ v.video_id }}" class="recommend-thumb" loading="lazy">
-                <div>
-                    <div class="recommend-title">{{ v.title }}</div>
-                    <div class="recommend-meta">{{ v.author }}<br>{{ v.view_count_text }}</div>
-                </div>
-            </a>
-            {% endfor %}
+                <div class="cp-card">  
+                    <div class="cp-card-title">情報取得 API</div>  
+                    <select class="cp-select" id="cpInfoApiSelect" onchange="applyInfoApiChange(this.value)">  
+                        <option value="">自動選択</option>  
+                        <option value="invidious">Invidious API</option>  
+                        <option value="sia">Sia API</option>  
+                        <option value="sennin">Sennin API</option>  
+                    </select>  
+                </div>  
+            </div>  
+        </div>  
+    </div>  
+</div>  
 
-            <div class="info-card">
-                <h3><i class="fas fa-info-circle" style="margin-right:8px; color:var(--primary-color);"></i>この動画について</h3>
-                <div class="info-buttons">
-                    <button class="info-btn" onclick="openModal()"><i class="fas fa-download"></i>保存</button>
-                    <a href="https://www.youtube.com/watch?v={{ videoid }}" target="_blank" class="info-btn"><i class="fab fa-youtube"></i>本家へ</a>
-                    <button class="info-btn" onclick="copyId()"><i class="fas fa-fingerprint"></i>ID保存</button>
-                    <a href="/thumbnail?v={{ videoid }}" download="{{ videoid }}.jpg" class="info-btn"><i class="fas fa-image"></i>サムネ保存</a>
-                </div>
-            </div>
-        </div>
-    </main>
+<div class="yt-watch-page-container">  
+    <div class="yt-primary-column">  
+        <div id="player-wrapper">  
+            <div id="loader" class="loader-overlay">  
+                <div class="yt-spinner"></div>  
+            </div>  
+            <video id="video-player" controls autoplay poster="/thumbnail?v={{ videoid }}" src="{{ videourls[0] if videourls else '' }}">  
+                お使いのブラウザは動画再生に対応していません。  
+            </video>  
+            <audio id="audio-sync" style="display:none;"></audio>  
+            <div id="iframe-container" style="display:none; width:100%; height:100%;"></div>  
+        </div>  
 
-    <script>
-        const video = document.getElementById('video-player');
-        const audio = document.getElementById('audio-sync');
-        const loader = document.getElementById('loader');
-        const selectWrapper = document.getElementById('qualitySelect');
-        const selectTrigger = selectWrapper.querySelector('.custom-select-trigger');
-        const options = selectWrapper.querySelectorAll('.custom-option');
-        const iframeContainer = document.getElementById('iframe-container');
-        let hls = null;
+        <h1 class="yt-video-title" id="video-title">  
+            {% if video_title %}{{ video_title }}{% else %}<div class="skeleton-box skeleton-text" style="width: 75%; height: 24px;"></div>{% endif %}  
+        </h1>  
 
-        function toggleControlMenu() {
-            const menu = document.getElementById('ctrlMenu');
-            menu.style.display = (menu.style.display === 'flex') ? 'none' : 'flex';
-        }
+        <div class="yt-owner-actions-row">  
+            <div class="yt-owner-info" id="owner-info">  
+                <a href="/channel/{{ author_id }}" class="yt-channel-avatar-link" id="channel-avatar">  
+                    <img src="{{ author_icon }}" alt="{{ author }}" onerror="this.style.display='none'">  
+                </a>  
+                <div class="yt-channel-text" id="channel-text">  
+                    {% if author %}  
+                        <a href="/channel/{{ author_id }}" class="yt-channel-name">{{ author }}</a>  
+                        <span class="yt-channel-subscribers">チャンネル登録者数 {{ subscribers_count }}</span>  
+                    {% else %}  
+                        <div class="skeleton-box skeleton-text" style="width: 120px; height: 16px;"></div>  
+                        <div class="skeleton-box skeleton-text" style="width: 80px; height: 12px; margin-top: 4px;"></div>  
+                    {% endif %}  
+                </div>  
+                <button class="yt-subscribe-btn" id="subscribe-btn" onclick="toggleSubscribe('{{ author_id }}')">チャンネル登録</button>  
+            </div>  
 
-        function toggleLoop(el) {
-            video.loop = !video.loop;
-            el.classList.toggle('active');
-            showNotify(video.loop ? "ループ再生を有効にしました" : "ループ再生を解除しました");
-        }
+            <div class="yt-actions-group">  
+                <div class="yt-like-dislike-group">  
+                    <button class="yt-like-btn">  
+                        <i class="far fa-thumbs-up"></i>  
+                        <span>{{ like_count if like_count else '高評価' }}</span>  
+                    </button>  
+                    <div class="yt-like-dislike-divider"></div>  
+                    <button class="yt-dislike-btn" aria-label="低評価">  
+                        <i class="far fa-thumbs-down"></i>  
+                    </button>  
+                </div>  
 
-        function toggleMute(el) {
-            video.muted = !video.muted;
-            audio.muted = video.muted;
-            el.classList.toggle('active');
-            showNotify(video.muted ? "音声をミュートしました" : "ミュートを解除しました");
-        }
+                <button class="yt-pill-button" onclick="openModal()">  
+                    <i class="fas fa-download"></i>  
+                    <span>保存</span>  
+                </button>  
 
-        function openQualityFromCtrl() {
-            toggleControlMenu();
-            selectWrapper.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            setTimeout(() => selectWrapper.classList.add('open'), 500);
-        }
+                <div class="yt-custom-select" id="qualitySelect">  
+                    <button class="yt-pill-button" id="qualityTrigger" onclick="toggleQualityDropdown(event)">  
+                        <i class="fas fa-cog"></i>  
+                        <span id="qualityLabel">画質: 自動</span>  
+                        <i class="fas fa-chevron-down" style="font-size: 0.75rem; margin-left: 2px;"></i>  
+                    </button>  
+                    <div class="yt-select-dropdown">  
+                        <div class="yt-dropdown-item selected" data-value="{{ videourls[0] if videourls else '' }}" data-audio="">自動 (デフォルト)</div>  
+                        {% for stream in streamUrls %}  
+                        <div class="yt-dropdown-item" data-value="{{ stream.url }}" data-audio="{{ stream.audioUrl or '' }}">  
+                            {{ stream.resolution }} ({{ stream.format }})  
+                        </div>  
+                        {% endfor %}  
+                        <div class="yt-dropdown-item" data-type="m3u8" data-value="{{ youtube_url }}">HLS (m3u8)</div>  
+                    </div>  
+                </div>  
 
-        function toggleSourceOptions() {
-            document.getElementById('srcOpts').classList.toggle('show');
-        }
+                <div class="yt-custom-select" id="apiInfoSelect">  
+                    <button class="yt-pill-button" id="apiInfoTrigger" onclick="toggleApiInfoDropdown(event)">  
+                        <span class="yt-api-status active"></span>  
+                        <span id="apiInfoLabel">API: 情報を確認中</span>  
+                        <i class="fas fa-chevron-down" style="font-size: 0.75rem; margin-left: 2px;"></i>  
+                    </button>  
+                    <div class="yt-select-dropdown" id="apiInfoDropdown">  
+                        <div class="yt-dropdown-section">  
+                            <div class="yt-dropdown-label">情報取得API</div>  
+                            <div id="infoApiDisplay" class="yt-dropdown-value">取得中...</div>  
+                            <div id="infoApiStatusDisplay" class="yt-dropdown-value" style="color: var(--yt-spec-text-secondary); font-size: 0.7rem; margin-top: 2px;"></div>  
+                        </div>  
+                        <div class="yt-dropdown-section">  
+                            <div class="yt-dropdown-label">ストリーム取得API</div>  
+                            <div id="streamApiDisplay" class="yt-dropdown-value">取得中...</div>  
+                            <div id="streamApiStatusDisplay" class="yt-dropdown-value" style="color: var(--yt-spec-text-secondary); font-size: 0.7rem; margin-top: 2px;"></div>  
+                        </div>  
+                    </div>  
+                </div>  
+            </div>  
+        </div>  
 
-        let currentSourceType = 'stream';
-        function setExternalSource(type) {
-            if (currentSourceType === type) return;
-            
-            document.querySelectorAll('.sub-item').forEach(i => i.classList.remove('selected'));
-            document.getElementById('src-' + type).classList.add('selected');
-            document.getElementById('sourceToggle').classList.toggle('active', type !== 'stream');
-            
-            currentSourceType = type;
-            
-            if (type === 'stream') {
-                iframeContainer.style.display = 'none';
-                iframeContainer.innerHTML = '';
-                video.style.display = 'block';
-                video.play().catch(() => {});
-                showNotify("Streamソースに戻しました");
-            } else {
-                let domain = type === 'nocookie' ? 'www.youtube-nocookie.com' : 'www.youtube-education.com';
-                const ytUrl = `https://${domain}/embed/{{ videoid }}?autoplay=1`;
-                video.pause();
-                video.style.display = 'none';
-                iframeContainer.innerHTML = `<iframe src="${ytUrl}" allow="autoplay; encrypted-media" allowfullscreen></iframe>`;
-                iframeContainer.style.display = 'block';
-                showNotify(`${type === 'nocookie' ? 'NoCookie' : 'Education'}に切り替えました`);
-            }
-        }
+        <div class="yt-description-container collapsed" id="description-container">  
+            <div class="yt-description-header">  
+                <span>{{ view_count if view_count else '---' }} 回視聴</span>  
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;">  
+                    <span class="yt-api-badge" id="api-info-badge">  
+                        情報API: <span id="current-info-api-name">{{ info_api_used or '取得中' }}</span>  
+                    </span>  
+                    <span class="yt-api-badge" id="stream-info-badge">  
+                        ストリームAPI: <span id="current-stream-api-name">{{ stream_api_used or '取得中' }}</span>  
+                    </span>  
+                </div>  
+            </div>  
+            <div class="yt-description-body" id="description-body">{% if description %}{{ description | safe }}{% else %}<div class="skeleton-box skeleton-text" style="width: 90%;"></div><div class="skeleton-box skeleton-text" style="width: 60%;"></div>{% endif %}</div>  
+            <button class="yt-description-toggle-btn" id="desc-toggle-btn" onclick="toggleDescription()">...もっと見る</button>  
+        </div>  
 
-        selectTrigger.addEventListener('click', () => {
-            selectWrapper.classList.toggle('open');
-        });
+        <div class="yt-comments-container">  
+            <div class="yt-comments-header" style="font-weight:700; margin-bottom:16px; text-align: left;"><span>コメント</span></div>  
+            <div id="comment-list">  
+                {% if comments %}  
+                    {% for c in comments %}  
+                    <div class="yt-comment-item" style="display:flex; gap:16px; margin-bottom:20px; text-align: left;">  
+                        <img src="{{ c.authorThumbnail if c.authorThumbnail else (c.authorThumbnails|last).url if c.authorThumbnails else '' }}" class="yt-comment-avatar" style="width:40px; height:40px; border-radius:50%; flex-shrink:0;" onerror="this.style.display='none'">  
+                        <div>  
+                            <div style="font-size:0.8rem; font-weight:600;">{{ c.author }} <span style="color:var(--yt-spec-text-secondary); font-weight:400;">{{ c.publishedText }}</span></div>  
+                            <div style="font-size:0.875rem; margin-top:4px;">{{ c.contentHtml | safe }}</div>  
+                        </div>  
+                    </div>  
+                    {% endfor %}  
+                {% else %}  
+                    <div class="yt-comment-item" style="display:flex; gap:16px; margin-bottom:16px; text-align: left;">  
+                        <div class="skeleton-box" style="width:40px; height:40px; border-radius:50%;"></div>  
+                        <div style="flex:1;">  
+                            <div class="skeleton-box skeleton-text" style="width: 120px;"></div>  
+                            <div class="skeleton-box skeleton-text" style="width: 80%;"></div>  
+                        </div>  
+                    </div>  
+                {% endif %}  
+            </div>  
+        </div>  
+    </div>  
 
-        options.forEach(option => {
-            option.addEventListener('click', function() {
-                const type = this.getAttribute('data-type');
-                const url = this.getAttribute('data-value');
-                const audioUrl = this.getAttribute('data-audio');
+    <div class="yt-secondary-column" id="recommend-column">  
+        {% if playlist_videos %}  
+        <div class="yt-playlist-panel" id="playlist-panel">  
+            <div class="yt-playlist-panel-header">  
+                <div style="display: flex; flex-direction: column; gap: 2px;">  
+                    <span>{{ playlist_title if playlist_title else 'プレイリスト' }}</span>  
+                    <span style="font-size:0.75rem; color:var(--yt-spec-text-secondary); font-weight:normal;">プレイリスト動画</span>  
+                </div>  
+                <i class="fas fa-times yt-playlist-panel-close" onclick="closePlaylist()" title="閉じる"></i>  
+            </div>  
+            {% for pv in playlist_videos %}  
+            <a href="/watch?v={{ pv.videoId }}&list={{ playlist_id }}" class="yt-playlist-panel-item {% if pv.videoId == videoid %}active{% endif %}">  
+                <div class="yt-playlist-panel-num">{{ loop.index }}</div>  
+                <div class="yt-playlist-panel-thumb-wrapper">  
+                    <img src="/proxy/thumb?v={{ pv.videoId }}" class="yt-playlist-panel-thumb" alt="{{ pv.title }}" onerror="this.style.opacity='0.3'">  
+                </div>  
+                <div class="yt-playlist-panel-details">  
+                    <div class="yt-playlist-panel-title">{{ pv.title }}</div>  
+                    <div class="yt-playlist-panel-author">{{ pv.author }}</div>  
+                </div>  
+            </a>  
+            {% endfor %}  
+        </div>  
+        {% endif %}  
 
-                if (type === 'm3u8') {
-                    if (confirm("取得に時間がかかりますがよろしいですか？")) {
-                        selectWrapper.classList.remove('open');
-                        fetchM3U8(url);
-                    }
-                    return;
-                }
+        {% if recommended_videos %}  
+            {% for v in recommended_videos %}  
+            <a href="/watch?v={{ v.video_id }}" class="yt-recommend-card">  
+                <div class="yt-recommend-thumb-wrapper">  
+                    <img src="/thumbnail?v={{ v.video_id }}" class="yt-recommend-thumb" loading="lazy" alt="{{ v.title }}" onerror="this.style.opacity='0.3'">  
+                </div>  
+                <div class="yt-recommend-details">  
+                    <div class="yt-recommend-title">{{ v.title }}</div>  
+                    <div class="yt-recommend-meta">  
+                        <div>{{ v.author }}</div>  
+                        <div>{{ v.view_count_text }}</div>  
+                    </div>  
+                </div>  
+            </a>  
+            {% endfor %}  
+        {% else %}  
+            {% for i in range(8) %}  
+            <div class="yt-recommend-skeleton-card">  
+                <div class="skeleton-box yt-recommend-skeleton-thumb"></div>  
+                <div class="yt-recommend-skeleton-info">  
+                    <div class="skeleton-box skeleton-text" style="width: 90%; height: 14px;"></div>  
+                    <div class="skeleton-box skeleton-text" style="width: 70%; height: 14px;"></div>  
+                    <div class="skeleton-box skeleton-text" style="width: 50%; height: 12px; margin-top:4px;"></div>  
+                </div>  
+            </div>  
+            {% endfor %}  
+        {% endif %}  
+    </div>  
+</div>  
 
-                if (video.src === url) {
-                    selectWrapper.classList.remove('open');
-                    return;
-                }
-                options.forEach(opt => opt.classList.remove('selected'));
-                this.classList.add('selected');
-                selectTrigger.querySelector('span').innerText = this.innerText;
-                selectWrapper.classList.remove('open');
-                changeQualityLogic(url, audioUrl);
-            });
-        });
+<script>  
+    const video = document.getElementById('video-player');  
+    const audio = document.getElementById('audio-sync');  
+    const iframeContainer = document.getElementById('iframe-container');  
+    const videoId = "{{ videoid }}";  
+    const authorId = "{{ author_id }}";  
+    const streamApiUsed = "{{ stream_api_used }}";  
+    const infoApiUsed = "{{ info_api_used }}";  
+    let hlsInstance = null;  
+  
+    function saveWatchHistory() {  
+        if (!videoId) return;  
+        if (localStorage.getItem('yt_pause_history') === 'true') return;  
+  
+        let history = [];  
+  
+        try {  
+            history = JSON.parse(localStorage.getItem('yt_watch_history') || '[]');  
+            if (!Array.isArray(history)) history = [];  
+        } catch (e) {  
+            history = [];  
+        }  
+  
+        history = history.filter(item => item && item.videoId !== videoId);  
+  
+        const titleText = {% if video_title %}{{ video_title|tojson }}{% else %}document.getElementById('video-title')?.innerText?.trim() || ''{% endif %};
+        const authorText = {% if author %}{{ author|tojson }}{% else %}document.querySelector('.yt-channel-name')?.innerText?.trim() || ''{% endif %};
 
-        async function fetchM3U8(ytUrl) {
-            loader.style.display = 'flex';
-            showNotify("M3U8を取得中... (最大30秒)");
-            
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 30000);
-
-            try {
-                const apiUrl = `https://siasama-m3u8.onrender.com/extract?url=${encodeURIComponent(ytUrl)}`;
-                const resp = await fetch(apiUrl, { signal: controller.signal });
-                const data = await resp.json();
-                clearTimeout(timeoutId);
-
-                if (data && data.url) {
-                    playM3U8(data.url);
-                    showNotify("HLS再生を開始します");
-                } else {
-                    throw new Error("Invalid URL");
-                }
-            } catch (err) {
-                loader.style.display = 'none';
-                showNotify("取得に失敗しました。タイムアウトかサーバーエラーです。", true);
-            }
-        }
-
-        function playM3U8(m3u8Url) {
-            if (hls) {
-                hls.destroy();
-            }
-            audio.src = "";
-            if (Hls.isSupported()) {
-                hls = new Hls();
-                hls.loadSource(m3u8Url);
-                hls.attachMedia(video);
-                hls.on(Hls.Events.MANIFEST_PARSED, function() {
-                    video.play();
-                });
-            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                video.src = m3u8Url;
-                video.addEventListener('loadedmetadata', function() {
-                    video.play();
-                });
-            }
-        }
-
-        window.addEventListener('click', (e) => {
-            if (!selectWrapper.contains(e.target) && !document.getElementById('floating-control').contains(e.target)) {
-                selectWrapper.classList.remove('open');
-                document.getElementById('ctrlMenu').style.display = 'none';
-                document.getElementById('srcOpts').classList.remove('show');
-            }
-        });
-
-        function changeQualityLogic(url, audioUrl) {
-            if (hls) { hls.destroy(); hls = null; }
-            const currentTime = video.currentTime;
-            const isPaused = video.paused;
-            loader.style.display = 'flex';
-            video.src = url;
-            if(audioUrl) {
-                audio.src = audioUrl;
-                audio.load();
-            } else {
-                audio.src = "";
-            }
-            video.onloadedmetadata = () => {
-                video.currentTime = currentTime;
-                if (!isPaused) video.play().catch(() => {});
-                video.onloadedmetadata = null;
-            };
-            showNotify("画質を切り替えました");
-        }
-
-        function reloadVideoSource() {
-            if (currentSourceType !== 'stream') return;
-            const currentTime = video.currentTime;
-            const wasPlaying = !video.paused;
-            video.load();
-            video.onloadedmetadata = () => {
-                video.currentTime = currentTime;
-                if (wasPlaying) video.play().catch(() => {});
-                video.onloadedmetadata = null;
-            };
-            showNotify("動画ソースを再接続しました");
-        }
-
-        let loadStuckTimer = null;
-        video.addEventListener('play', () => {
-            loadStuckTimer = setTimeout(() => {
-                if (video.currentTime === 0 && video.readyState < 3) {
-                    reloadVideoSource();
-                }
-            }, 5000);
-        });
-        video.addEventListener('waiting', () => { 
-            loader.style.display = 'flex';
-            if (!loadStuckTimer) {
-                loadStuckTimer = setTimeout(() => {
-                    if (video.paused === false) reloadVideoSource();
-                }, 8000);
-            }
-        });
-        video.addEventListener('playing', () => { 
-            loader.style.display = 'none'; 
-            clearTimeout(loadStuckTimer);
-            loadStuckTimer = null;
-        });
-
-        // エラー自動リロードロジック
-        let errorHistory = [];
-        video.addEventListener('error', () => {
-            if (currentSourceType !== 'stream') return;
-            loader.style.display = 'none';
-            
-            const now = Date.now();
-            errorHistory.push(now);
-            // 10秒より古い履歴を削除
-            errorHistory = errorHistory.filter(time => now - time <= 10000);
-
-            if (errorHistory.length >= 2) {
-                showNotify("頻繁なエラーのため、自動リロードします...", true);
-                setTimeout(() => location.reload(), 1500);
-            } else {
-                showNotify("読み込みエラー。再試行中...", true);
-                setTimeout(reloadVideoSource, 1000);
-            }
-        });
-
-        let isSyncing = false;
-        video.addEventListener('timeupdate', () => {
-            if (audio.src && !video.paused && !isSyncing) {
-                const diff = video.currentTime - audio.currentTime;
-                if (Math.abs(diff) > 0.3) {
-                    isSyncing = true;
-                    audio.currentTime = video.currentTime;
-                    setTimeout(() => { isSyncing = false; }, 50);
-                }
-            }
-        });
-        video.addEventListener('play', () => { if (audio.src) audio.play().catch(() => {}); });
-        video.addEventListener('pause', () => { if (audio.src) audio.pause(); });
-        video.addEventListener('seeking', () => { if (audio.src) audio.currentTime = video.currentTime; });
-        video.addEventListener('ratechange', () => { if (audio.src) audio.playbackRate = video.playbackRate; });
-
-        function showNotify(msg, isError = false) {
-            const alertBox = document.getElementById("custom-alert");
-            const alertIcon = document.getElementById("alert-icon");
-            const alertText = document.getElementById("alert-text");
-            alertText.innerText = msg;
-            if (isError) {
-                alertBox.classList.add("error");
-                alertIcon.className = "fas fa-exclamation-triangle";
-                alertIcon.style.color = "var(--error-color)";
-            } else {
-                alertBox.classList.remove("error");
-                alertIcon.className = "fas fa-info-circle";
-                alertIcon.style.color = "var(--primary-color)";
-            }
-            $(alertBox).stop(true, true).fadeIn(300).delay(3000).fadeOut(500);
-        }
-        $('#searchbox').autocomplete({
-            source: function (request, response) {
-                $.getJSON("/suggest?keyword=" + encodeURIComponent(request.term), function(data) { response(data); });
-            },
-            delay: 300,
-            open: function() { $('.ui-autocomplete').hide().fadeIn(200); }
-        });
-        function openModal() { document.getElementById('dl-modal').style.display = 'flex'; }
-        function closeModal() { document.getElementById('dl-modal').style.display = 'none'; }
-        window.onclick = function(event) {
-            const modal = document.getElementById('dl-modal');
-            if (event.target == modal) closeModal();
-        }
-        function copyId() {
-            const id = "{{ videoid }}";
-            navigator.clipboard.writeText(id).then(() => { showNotify("動画IDをコピーしました"); });
-        }
-    </script>
-</body>
-</html>
+        history.unshift({  
+            videoId: videoId,  
+            title: titleText || '無題の動画',  
+            author: authorText || '',  
+            added_at: new Date().toLocaleString('ja-JP')  
+        });  
+  
+        localStorage.setItem('yt_watch_history', JSON.stringify(history));  
+    }  
+  
+    function toggleSubscribe(ucid) {  
+        if (!ucid) return;  
+  
+        let subs = JSON.parse(  
+            localStorage.getItem('subscribed_channels') || '[]'  
+        );  
+  
+        const isSubscribed = subs.includes(ucid);  
+  
+        if (isSubscribed) {  
+            subs = subs.filter(id => id !== ucid);  
+        } else {  
+            subs.push(ucid);  
+        }  
+  
+        localStorage.setItem(  
+            'subscribed_channels',  
+            JSON.stringify(subs)  
+        );  
+  
+        updateSubscribeState(!isSubscribed);  
+    }  
+  
+    function updateSubscribeState(isSubscribed) {  
+        const btn = document.getElementById('subscribe-btn');  
+        if (!btn) return;  
+        if (isSubscribed) {  
+            btn.innerText = '登録済み';  
+            btn.style.backgroundColor = 'var(--yt-spec-badge-chip-background)';  
+            btn.style.color = 'var(--yt-spec-text-primary)';  
+        } else {  
+            btn.innerText = 'チャンネル登録';  
+            btn.style.backgroundColor = 'var(--yt-spec-brand-subscribe-bg)';  
+            btn.style.color = 'var(--yt-spec-brand-subscribe-text)';  
+        }  
+    }  
+  
+    function checkSubscribeStatus(ucic) {  
+        if (!ucic) return;  
+        const subs = JSON.parse(localStorage.getItem('subscribed_channels') || '[]');  
+        updateSubscribeState(subs.includes(ucic));  
+    }  
+  
+    function closePlaylist() {  
+        const panel = document.getElementById('playlist-panel');  
+        if (panel) {  
+            panel.style.display = 'none';  
+        }  
+    }  
+  
+    video.addEventListener('play', () => { if (audio.src) audio.play(); });  
+    video.addEventListener('pause', () => { if (audio.src) audio.pause(); });  
+    video.addEventListener('seeking', () => { if (audio.src) audio.currentTime = video.currentTime; });  
+    video.addEventListener('ratechange', () => { if (audio.src) audio.playbackRate = video.playbackRate; });  
+  
+    function openModal() { document.getElementById('dl-modal').style.display = 'flex'; }  
+    function closeModal() { document.getElementById('dl-modal').style.display = 'none'; }  
+      
+    let alertTimeout = null;  
+  
+    function showAlert(text, duration = 3000, isError = false) {  
+        const el = document.getElementById('custom-alert');  
+        const icon = document.getElementById('alert-icon');  
+        document.getElementById('alert-text').innerText = text;  
+  
+        if (isError) {  
+            el.classList.add('error');  
+            icon.className = 'fas fa-exclamation-circle';  
+            icon.style.color = '#ff4d4d';  
+        } else {  
+            el.classList.remove('error');  
+            icon.className = 'fas fa-info-circle';  
+            icon.style.color = '#4caf50';  
+        }  
+  
+        el.style.transform = '';  
+        el.style.opacity = '';  
+        el.classList.remove('hiding');  
+        el.classList.add('show');  
+  
+        if (alertTimeout) clearTimeout(alertTimeout);  
+        alertTimeout = setTimeout(() => {  
+            hideAlert();  
+        }, duration);  
+    }  
+  
+    function hideAlert() {  
+        const el = document.getElementById('custom-alert');  
+        if (!el.classList.contains('show')) return;  
+        el.classList.remove('show');  
+        el.classList.add('hiding');  
+        setTimeout(() => {  
+            el.classList.remove('hiding');  
+        }, 300);  
+    }  
+  
+    (function initSwipeableAlert() {  
+        const el = document.getElementById('custom-alert');  
+        let startX = 0;  
+        let currentX = 0;  
+        let isDragging = false;  
+  
+        function onStart(e) {  
+            isDragging = true;  
+            startX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;  
+            el.classList.add('swiping');  
+            if (alertTimeout) clearTimeout(alertTimeout);  
+        }  
+  
+        function onMove(e) {  
+            if (!isDragging) return;  
+            currentX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;  
+            const diffX = currentX - startX;  
+            el.style.transform = `translateX(${diffX}px)`;  
+            el.style.opacity = 1 - Math.abs(diffX) / 200;  
+        }  
+  
+        function onEnd() {  
+            if (!isDragging) return;  
+            isDragging = false;  
+            el.classList.remove('swiping');  
+            const diffX = currentX - startX;  
+            if (Math.abs(diffX) > 80) {  
+                const flyOutX = diffX > 0 ? 300 : -300;  
+                el.style.transform = `translateX(${flyOutX}px)`;  
+                el.style.opacity = '0';  
+                setTimeout(() => {  
+                    hideAlert();  
+                }, 200);  
+            } else {  
+                el.style.transform = '';  
+                el.style.opacity = '';  
+            }  
+        }  
+  
+        el.addEventListener('touchstart', onStart, { passive: true });  
+        el.addEventListener('touchmove', onMove, { passive: true });  
+        el.addEventListener('touchend', onEnd);  
+  
+        el.addEventListener('mousedown', onStart);  
+        window.addEventListener('mousemove', onMove);  
+        window.addEventListener('mouseup', onEnd);  
+    })();  
+  
+    function toggleDescription() {  
+        const container = document.getElementById('description-container');  
+        const btn = document.getElementById('desc-toggle-btn');  
+        if (container.classList.contains('collapsed')) {  
+            container.classList.remove('collapsed');  
+            btn.innerText = '一部を表示';  
+        } else {  
+            container.classList.add('collapsed');  
+            btn.innerText = '...もっと見る';  
+        }  
+    }  
+  
+    function updateApiDisplay() {  
+        const infoApiMap = {  
+            'invidious': { name: 'Invidious', timeout: '4.0s' },  
+            'sia': { name: 'Sia Tube', timeout: '3.0s' },  
+            'sennin': { name: 'Sennin', timeout: '4.0s' }  
+        };  
+  
+        const streamApiMap = {  
+            'sia': { name: 'Sia Tube', timeout: '2.5s' },  
+            'piped': { name: 'Piped', timeout: '2.5s' },  
+            'rapidapi': { name: 'RapidAPI', timeout: '2.5s' },  
+            'zernio': { name: 'Zernio', timeout: '3.0s' },  
+            'invidious': { name: 'Invidious', timeout: '4.0s' },  
+            'sennin': { name: 'Sennin', timeout: '3.5s' }  
+        };  
+  
+        const infoApi = infoApiUsed || 'invidious';  
+        const streamApi = streamApiUsed || 'sia';  
+  
+        const infoData = infoApiMap[infoApi] || { name: infoApi.toUpperCase(), timeout: '?' };  
+        const streamData = streamApiMap[streamApi] || { name: streamApi.toUpperCase(), timeout: '?' };  
+  
+        document.getElementById('infoApiDisplay').innerText = `${infoApi} - ${infoData.name}`;  
+        document.getElementById('infoApiStatusDisplay').innerText = `タイムアウト: ${infoData.timeout}`;  
+        document.getElementById('current-info-api-name').innerText = infoApi.toUpperCase();  
+  
+        document.getElementById('streamApiDisplay').innerText = `${streamApi} - ${streamData.name}`;  
+        document.getElementById('streamApiStatusDisplay').innerText = `タイムアウト: ${streamData.timeout}`;  
+        document.getElementById('current-stream-api-name').innerText = streamApi.toUpperCase();  
+  
+        const apiLabel = `API: ${infoApi.substring(0, 3).toUpperCase()} / ${streamApi.substring(0, 3).toUpperCase()}`;  
+        document.getElementById('apiInfoLabel').innerText = apiLabel;  
+    }  
+  
+    function toggleQualityDropdown(e) {  
+        e.stopPropagation();  
+        document.getElementById('qualitySelect').classList.toggle('open');  
+        document.getElementById('apiInfoSelect').classList.remove('open');  
+    }  
+  
+    function toggleApiInfoDropdown(e) {  
+        e.stopPropagation();  
+        document.getElementById('apiInfoSelect').classList.toggle('open');  
+        document.getElementById('qualitySelect').classList.remove('open');  
+    }  
+  
+    document.addEventListener('click', (e) => {  
+        if (!e.target.closest('#qualitySelect')) {  
+            document.getElementById('qualitySelect').classList.remove('open');  
+        }  
+        if (!e.target.closest('#apiInfoSelect')) {  
+            document.getElementById('apiInfoSelect').classList.remove('open');  
+        }  
+        const panel = document.getElementById('controlPanel');  
+        const trigger = document.querySelector('.yt-control-trigger');  
+        if (panel.classList.contains('open') && !panel.contains(e.target) && !trigger.contains(e.target)) {  
+            toggleControlPanel();  
+        }  
+    });  
+  
+    document.querySelectorAll('#qualitySelect .yt-dropdown-item').forEach(item => {  
+        item.addEventListener('click', function() {  
+            document.querySelectorAll('#qualitySelect .yt-dropdown-item').forEach(i => i.classList.remove('selected'));  
+            this.classList.add('selected');  
+              
+            const videoUrl = this.getAttribute('data-value');  
+            const audioUrl = this.getAttribute('data-audio');  
+            const type = this.getAttribute('data-type');  
+              
+            const qualityText = "画質: " + this.innerText.trim();  
+            document.getElementById('qualityLabel').innerText = qualityText;  
+            document.getElementById('cpCurrentQualityText').innerText = this.innerText.trim();  
+            changeSource(videoUrl, audioUrl, type);  
+        });  
+    });  
+  
+    function changeSource(vUrl, aUrl, type) {  
+        if (hlsInstance) {  
+            hlsInstance.destroy();  
+            hlsInstance = null;  
+        }  
+  
+        iframeContainer.style.display = 'none';  
+        iframeContainer.innerHTML = '';  
+        video.style.display = 'block';  
+  
+        if (type === 'm3u8') {  
+            if (Hls.isSupported()) {  
+                hlsInstance = new Hls();  
+                hlsInstance.loadSource(vUrl);  
+                hlsInstance.attachMedia(video);  
+            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {  
+                video.src = vUrl;  
+            }  
+            audio.removeAttribute('src');  
+            showAlert('HLS (m3u8) で再生中...', 2000);  
+        } else {  
+            video.src = vUrl;  
+            if (aUrl) {  
+                audio.src = aUrl;  
+                audio.currentTime = video.currentTime;  
+            } else {  
+                audio.removeAttribute('src');  
+            }  
+            showAlert('画質を変更しました', 1500);  
+        }  
+        video.play();  
+    }  
+  
+    function toggleControlPanel() {  
+        const panel = document.getElementById('controlPanel');  
+        panel.classList.toggle('open');  
+    }  
+  
+    function switchCpTab(idx) {  
+        const tabs = document.querySelectorAll('.cp-tab');  
+        tabs.forEach((tab, i) => {  
+            tab.classList.toggle('active', i === idx);  
+        });  
+        const track = document.getElementById('cpSlideTrack');  
+        track.style.transform = `translateX(-${idx * 100}%)`;  
+    }  
+  
+    function toggleLoopSwitch(checked) {  
+        video.loop = checked;  
+        showAlert(video.loop ? "ループ再生をONにしました" : "ループ再生をOFFにしました", 1500);  
+    }  
+  
+    function toggleMuteSwitch(checked) {  
+        video.muted = checked;  
+        audio.muted = checked;  
+        showAlert(video.muted ? "ミュートにしました" : "ミュートを解除しました", 1500);  
+    }  
+  
+    function openQualityDropdownFromCp() {  
+        toggleControlPanel();  
+        document.getElementById('qualitySelect').classList.add('open');  
+    }  
+  
+    function selectSourceMode(mode) {  
+        document.querySelectorAll('.cp-mode-card').forEach(card => card.classList.remove('selected'));  
+        const selectedCard = document.getElementById(`cp-mode-card-${mode}`);  
+        if (selectedCard) selectedCard.classList.add('selected');  
+          
+        const radio = document.getElementById(`cp-src-${mode}`);  
+        if (radio) radio.checked = true;  
+  
+        localStorage.setItem('pref_embed_mode', mode);  
+        setExternalSource(mode);  
+    }  
+  
+    function setExternalSource(mode) {  
+        if (mode === 'stream') {  
+            iframeContainer.style.display = 'none';  
+            iframeContainer.innerHTML = '';  
+            video.style.display = 'block';  
+            video.play();  
+            showAlert('Stream 再生に切り替えました', 1500);  
+        } else {  
+            video.pause();  
+            video.style.display = 'none';  
+            audio.removeAttribute('src');  
+            iframeContainer.style.display = 'block';  
+              
+            let embedUrl = "";  
+            if (mode === 'nocookie') {  
+                embedUrl = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1`;  
+                showAlert('YouTube NoCookie で再生中...', 1500);  
+            } else if (mode === 'edu') {  
+                embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1`;  
+                showAlert('YouTube Education で再生中...', 1500);  
+            }  
+            iframeContainer.innerHTML = `<iframe src="${embedUrl}" allow="autoplay; encrypted-media" allowfullscreen style="width:100%; height:100%; border:none;"></iframe>`;  
+        }  
+    }  
+  
+    function applyStreamApiChange(apiId) {  
+        if (!apiId) {  
+            showAlert('ストリームAPIを自動選択に設定しました', 1500);  
+            return;  
+        }  
+  
+        const currentUrl = new URL(window.location.href);  
+        currentUrl.searchParams.set('stream_api', apiId);  
+          
+        showAlert(`ストリームAPIを「${apiId.toUpperCase()}」に変更します...`, 1500);  
+          
+        setTimeout(() => {  
+            window.location.href = currentUrl.toString();  
+        }, 500);  
+    }  
+  
+    function applyInfoApiChange(apiId) {  
+        if (!apiId) {  
+            showAlert('情報取得APIを自動選択に設定しました', 1500);  
+            return;  
+        }  
+  
+        const currentUrl = new URL(window.location.href);  
+        currentUrl.searchParams.set('info_api', apiId);  
+          
+        showAlert(`情報取得APIを「${apiId.toUpperCase()}」に変更します...`, 1500);  
+          
+        setTimeout(() => {  
+            window.location.href = currentUrl.toString();  
+        }, 500);  
+    }  
+  
+    document.addEventListener('DOMContentLoaded', () => {  
+        const urlParams = new URLSearchParams(window.location.search);  
+        const currentInfoApi = urlParams.get('info_api') || infoApiUsed || '';  
+        const currentStreamApi = urlParams.get('stream_api') || streamApiUsed || '';  
+          
+        checkSubscribeStatus(authorId);  
+  
+        const streamSelect = document.getElementById('cpStreamApiSelect');  
+        if (streamSelect) streamSelect.value = currentStreamApi || '';  
+  
+        const infoSelect = document.getElementById('cpInfoApiSelect');  
+        if (infoSelect) infoSelect.value = currentInfoApi || '';  
+  
+        document.getElementById('cpLoopToggle').checked = video.loop;  
+        document.getElementById('cpMuteToggle').checked = video.muted;  
+  
+        const preferredEmbedMode = localStorage.getItem('pref_embed_mode') || 'stream';  
+        selectSourceMode(preferredEmbedMode);  
+  
+        updateApiDisplay();  
+  
+        const thumbs = document.querySelectorAll('.yt-recommend-thumb');  
+        thumbs.forEach(thumb => {  
+            thumb.loading = 'lazy';  
+        });  
+  
+        saveWatchHistory();  
+    });  
+  
+    if ('IntersectionObserver' in window) {  
+        const observer = new IntersectionObserver((entries) => {  
+            entries.forEach(entry => {  
+                if (entry.isIntersecting && entry.target.tagName === 'IMG') {  
+                    const img = entry.target;  
+                    if (img.dataset.src) {  
+                        img.src = img.dataset.src;  
+                        img.removeAttribute('data-src');  
+                        observer.unobserve(img);  
+                    }  
+                }  
+            });  
+        });  
+  
+        document.querySelectorAll('img[data-src]').forEach(img => observer.observe(img));  
+    }  
+  
+    window.addEventListener('beforeunload', () => {  
+        if (hlsInstance) {  
+            hlsInstance.destroy();  
+        }  
+        video.src = '';  
+        audio.src = '';  
+    });  
+</script>  {% endblock %}

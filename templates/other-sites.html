@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}その他のYouTubeサイト - 仙人Tube{% endblock %}
+
+{% block extra_css %}
+<style>
+    .other-sites-container {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 20px 0;
+    }
+
+    .other-sites-header {
+        margin-bottom: 24px;
+        border-bottom: 1px solid var(--yt-border-color);
+        padding-bottom: 16px;
+    }
+
+    .other-sites-header h1 {
+        font-size: 24px;
+        font-weight: 500;
+        margin: 0 0 8px 0;
+    }
+
+    .other-sites-header p {
+        color: var(--yt-text-secondary);
+        font-size: 14px;
+        margin: 0;
+    }
+
+    /* メニューカード一覧 Grid */
+    .sites-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        gap: 16px;
+        margin-bottom: 32px;
+    }
+
+    .site-card {
+        background-color: var(--yt-search-bg);
+        border: 1px solid var(--yt-border-color);
+        border-radius: 12px;
+        padding: 20px;
+        display: flex;
+        align-items: flex-start;
+        gap: 16px;
+        text-decoration: none;
+        color: var(--yt-text-primary);
+        transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+    }
+
+    .site-card:hover {
+        background-color: var(--yt-hover-bg);
+        border-color: var(--yt-text-secondary);
+        transform: translateY(-2px);
+    }
+
+    .site-card .material-symbols-outlined {
+        font-size: 28px;
+        color: var(--yt-brand-red);
+        flex-shrink: 0;
+    }
+
+    .card-content h2 {
+        font-size: 16px;
+        font-weight: 500;
+        margin: 0 0 6px 0;
+    }
+
+    .card-content p {
+        font-size: 13px;
+        color: var(--yt-text-secondary);
+        margin: 0;
+        line-height: 1.4;
+    }
+
+    /* 戻るボタンエリア */
+    .back-nav {
+        margin-top: 24px;
+    }
+
+    .back-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--yt-text-secondary);
+        text-decoration: none;
+        font-size: 14px;
+        transition: color 0.2s ease;
+    }
+
+    .back-link:hover {
+        color: var(--yt-text-primary);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="other-sites-container">
+    <div class="other-sites-header">
+        <h1>その他のYouTubeサイト</h1>
+        <p>外部のYouTube関連サービス・代替サイトの一覧です。</p>
+    </div>
+
+    <!-- サイト一覧 Grid -->
+    <div class="sites-grid">
+        <a href="https://example.com/shia-tube" target="_blank" rel="noopener noreferrer" class="site-card">
+            <span class="material-symbols-outlined">smart_display</span>
+            <div class="card-content">
+                <h2>しあtube</h2>
+                <p>しあtube復活あつい</p>
+            </div>
+        </a>
+
+        <a href="https://example.com/nakayoshi-tube" target="_blank" rel="noopener noreferrer" class="site-card">
+            <span class="material-symbols-outlined">group</span>
+            <div class="card-content">
+                <h2>なかよしtube</h2>
+                <p>2a exe様開発</p>
+            </div>
+        </a>
+
+        <a href="/xerox-yt" target="_blank" rel="noopener noreferrer" class="site-card">
+            <span class="material-symbols-outlined">ondemand_video</span>
+            <div class="card-content">
+                <h2>xerox yt nt v5</h2>
+                <p>xeroxytntだよ。short見れる</p>
+            </div>
+        </a>
+
+
+    <!-- その他画面へ戻るボタン -->
+    <div class="back-nav">
+        <a href="/other" class="back-link">
+            <span class="material-symbols-outlined">arrow_back</span>
+            その他へ戻る
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    $(document).ready(function() {
+        // 必要に応じて/other-sites専用のJS処理を記述
+    });
+</script>
+{% endblock %}

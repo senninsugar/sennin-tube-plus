@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex,nofollow">
+    <title>{% block title %}仙人Tube{% endblock %}</title>
+    <link rel="icon" href="/img/logo/favicon.ico">
+    
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Noto+Sans+JP:wght@400;500;700&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script>
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
+
+    <style>
+        /* --- YouTube Official Theme Design Variables --- */
+        :root {
+            --yt-bg: #0f0f0f;
+            --yt-header-bg: #0f0f0f;
+            --yt-sidebar-bg: #0f0f0f;
+            --yt-text-primary: #f1f1f1;
+            --yt-text-secondary: #aaa;
+            --yt-border-color: #272727;
+            --yt-hover-bg: rgba(255, 255, 255, 0.1);
+            --yt-active-bg: rgba(255, 255, 255, 0.2);
+            --yt-chip-bg: #272727;
+            --yt-chip-active-bg: #f1f1f1;
+            --yt-chip-active-text: #0f0f0f;
+            --yt-search-bg: #121212;
+            --yt-search-btn-bg: #222222;
+            --yt-suggest-bg: #212121;
+            --yt-suggest-shadow: rgba(0, 0, 0, 0.6);
+            --yt-brand-red: #ff0000;
+        }
+
+        @media (prefers-color-scheme: light) {
+            :root {
+                --yt-bg: #ffffff;
+                --yt-header-bg: #ffffff;
+                --yt-sidebar-bg: #ffffff;
+                --yt-text-primary: #0f0f0f;
+                --yt-text-secondary: #606060;
+                --yt-border-color: #e5e5e5;
+                --yt-hover-bg: rgba(0, 0, 0, 0.05);
+                --yt-active-bg: rgba(0, 0, 0, 0.1);
+                --yt-chip-bg: rgba(0, 0, 0, 0.05);
+                --yt-chip-active-bg: #0f0f0f;
+                --yt-chip-active-text: #ffffff;
+                --yt-search-bg: #ffffff;
+                --yt-search-btn-bg: #f8f8f8;
+                --yt-suggest-bg: #ffffff;
+                --yt-suggest-shadow: rgba(0, 0, 0, 0.2);
+            }
+        }
+
+        /* --- Custom Theme Class Overrides --- */
+        html.dark {
+            --yt-bg: #0f0f0f;
+            --yt-header-bg: #0f0f0f;
+            --yt-sidebar-bg: #0f0f0f;
+            --yt-text-primary: #f1f1f1;
+            --yt-text-secondary: #aaa;
+            --yt-border-color: #272727;
+            --yt-hover-bg: rgba(255, 255, 255, 0.1);
+            --yt-active-bg: rgba(255, 255, 255, 0.2);
+            --yt-chip-bg: #272727;
+            --yt-chip-active-bg: #f1f1f1;
+            --yt-chip-active-text: #0f0f0f;
+            --yt-search-bg: #121212;
+            --yt-search-btn-bg: #222222;
+            --yt-suggest-bg: #212121;
+            --yt-suggest-shadow: rgba(0, 0, 0, 0.6);
+        }
+
+        html.light {
+            --yt-bg: #ffffff;
+            --yt-header-bg: #ffffff;
+            --yt-sidebar-bg: #ffffff;
+            --yt-text-primary: #0f0f0f;
+            --yt-text-secondary: #606060;
+            --yt-border-color: #e5e5e5;
+            --yt-hover-bg: rgba(0, 0, 0, 0.05);
+            --yt-active-bg: rgba(0, 0, 0, 0.1);
+            --yt-chip-bg: rgba(0, 0, 0, 0.05);
+            --yt-chip-active-bg: #0f0f0f;
+            --yt-chip-active-text: #ffffff;
+            --yt-search-bg: #ffffff;
+            --yt-search-btn-bg: #f8f8f8;
+            --yt-suggest-bg: #ffffff;
+            --yt-suggest-shadow: rgba(0, 0, 0, 0.2);
+        }
+
+        html.light-glass {
+            --yt-bg: transparent;
+            --yt-header-bg: rgba(220, 245, 255, 0.25);
+            --yt-sidebar-bg: rgba(220, 245, 255, 0.2);
+            --yt-text-primary: #0f172a;
+            --yt-text-secondary: #475569;
+            --yt-border-color: rgba(255, 255, 255, 0.4);
+            --yt-hover-bg: rgba(255, 255, 255, 0.3);
+            --yt-active-bg: rgba(255, 255, 255, 0.45);
+            --yt-chip-bg: rgba(255, 255, 255, 0.3);
+            --yt-chip-active-bg: #0f172a;
+            --yt-chip-active-text: #ffffff;
+            --yt-search-bg: rgba(255, 255, 255, 0.4);
+            --yt-search-btn-bg: rgba(255, 255, 255, 0.3);
+            --yt-suggest-bg: rgba(240, 249, 255, 0.85);
+            --yt-suggest-shadow: rgba(31, 38, 135, 0.15);
+        }
+
+        /* --- Theme-dependent Body Backgrounds --- */
+        html.light body { background-color: hsl(0, 0%, 100%); }
+        html.dark body { background-color: hsl(0, 0%, 6%); }
+
+        /* Light Glass - Blue Stained Glass / Prism Effect */
+        html.light-glass body {
+            background-color: #e0f2fe;
+            background: 
+                /* Vivid Light Orbs */
+                fixed radial-gradient(circle at 15% 15%, hsla(190, 90%, 70%, 1) 0px, transparent 40%),
+                fixed radial-gradient(circle at 85% 20%, hsla(250, 80%, 80%, 1) 0px, transparent 40%),
+                fixed radial-gradient(circle at 20% 80%, hsla(210, 100%, 85%, 1) 0px, transparent 40%),
+                fixed radial-gradient(circle at 80% 80%, hsla(180, 90%, 75%, 1) 0px, transparent 40%),
+                /* Base Gradient */
+                fixed linear-gradient(135deg, #dbeafe 0%, #bfdbfe 50%, #e9d5ff 100%);
+            background-size: 200% 200%;
+            animation: gradientAnimation 20s ease-in-out infinite alternate;
+        }
+
+        /* Glass Panel Effect - The "Magnifying Glass / Distortion" Look */
+        .glass-panel,
+        html.light-glass #yt-header,
+        html.light-glass #yt-sidebar,
+        html.light-glass .ui-autocomplete,
+        html.light-glass .yt-modal {
+            /* Highly transparent blueish tint (Clear Glass) */
+            background-color: rgba(220, 245, 255, 0.15) !important;
+            
+            /* Reduced blur for transparency, high saturation for prism refraction */
+            backdrop-filter: blur(12px) saturate(250%) brightness(110%) contrast(105%) !important;
+            -webkit-backdrop-filter: blur(12px) saturate(250%) brightness(110%) contrast(105%) !important;
+            
+            /* Edges and Thickness - Sharper borders */
+            border: 1px solid rgba(255, 255, 255, 0.4) !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.5) !important;
+            border-right: 1px solid rgba(255, 255, 255, 0.5) !important;
+            
+            /* Subtle inner glow for glass edge, reduced shadow for cleaner look */
+            box-shadow: 
+                0 8px 32px 0 rgba(31, 38, 135, 0.05),
+                inset 0 0 0 1px rgba(255, 255, 255, 0.2),
+                inset 0 0 15px rgba(255, 255, 255, 0.15) !important;
+                
+            /* Very faint noise texture */
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.02'/%3E%3C/svg%3E");
+        }
+
+        @keyframes gradientAnimation {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        /* Page transition animation */
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in-main {
+          animation: fadeIn 0.35s ease-out forwards;
+        }
+
+        /* Modal animation */
+        @keyframes scaleIn {
+          from { opacity: 0; transform: scale(0.95); }
+          to { opacity: 1; transform: scale(1); }
+        }
+        .animate-scale-in {
+          animation: scaleIn 0.2s ease-out forwards;
+        }
+
+        /* Scrollbars */
+        ::-webkit-scrollbar {
+          width: 8px;
+          height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+          background-color: transparent;
+          border-radius: 20px;
+        }
+        body:hover::-webkit-scrollbar-thumb,
+        div:hover::-webkit-scrollbar-thumb {
+          background-color: rgba(100, 130, 180, 0.5); 
+        }
+        html.light body:hover::-webkit-scrollbar-thumb {
+          background-color: #aaa;
+        }
+        ::-webkit-scrollbar-thumb {
+          transition: background-color 0.2s ease-in-out;
+        }
+        * {
+          scrollbar-width: thin;
+          scrollbar-color: rgba(100, 130, 180, 0.5) transparent;
+        }
+        html.light * {
+            scrollbar-color: #aaa transparent;
+        }
+        .no-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+        .no-scrollbar {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Roboto', 'Noto Sans JP', sans-serif;
+            background-color: var(--yt-bg);
+            color: var(--yt-text-primary);
+            overflow-x: hidden;
+        }
+
+        /* --- Header --- */
+        #yt-header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 56px;
+            background-color: var(--yt-header-bg);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 16px;
+            z-index: 1000;
+        }
+
+        .header-start {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .icon-btn {
+            background: none;
+            border: none;
+            color: var(--yt-text-primary);
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .icon-btn:hover { background-color: var(--yt-hover-bg); }
+
+        /* YouTube Icon-Only Logo (文字なし) */
+        .yt-logo-icon {
+            display: flex;
+            align-items: center;
+            text-decoration: none;
+            cursor: pointer;
+            padding: 4px;
+        }
+        .yt-logo-icon svg {
+            height: 22px;
+            width: auto;
+        }
+
+        /* --- Search Bar --- */
+        .header-center {
+            display: flex;
+            align-items: center;
+            flex: 0 1 732px;
+            gap: 0;
+            margin: 0 8px 0 8px; /* ロゴとの間隔を小さく変更 */
+        }
+
+        .search-form {
+            display: flex;
+            flex: 1;
+            align-items: center;
+        }
+
+        .search-input-wrapper {
+            position: relative;
+            width: 100%;
+            display: flex;
+            align-items: center;
+        }
+
+        .search-input-wrapper input {
+            width: 100%;
+            height: 40px;
+            background-color: var(--yt-search-bg);
+            border: 1px solid var(--yt-border-color);
+            border-radius: 40px 0 0 40px;
+            padding: 0 16px 0 20px;
+            color: var(--yt-text-primary);
+            font-size: 16px;
+            outline: none;
+        }
+
+        .search-input-wrapper input:focus {
+            border-color: #1c62b9;
+        }
+
+        .search-btn {
+            height: 40px;
+            width: 64px;
+            background-color: var(--yt-search-btn-bg);
+            border: 1px solid var(--yt-border-color);
+            border-left: none;
+            border-radius: 0 40px 40px 0;
+            color: var(--yt-text-primary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .search-btn:hover { background-color: var(--yt-hover-bg); }
+
+        .header-end {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* --- Sidebar & Main Layout --- */
+        .yt-container {
+            display: flex;
+            margin-top: 56px;
+            min-height: calc(100vh - 56px);
+        }
+
+        #yt-sidebar {
+            width: 240px;
+            background-color: var(--yt-sidebar-bg);
+            height: calc(100vh - 56px);
+            position: fixed;
+            top: 56px;
+            left: 0;
+            overflow-y: auto;
+            padding: 12px;
+            transition: width 0.2s ease, transform 0.2s ease;
+            z-index: 900;
+        }
+
+        #yt-sidebar.collapsed {
+            width: 72px;
+            padding: 4px;
+        }
+
+        #yt-sidebar.collapsed .nav-item span:not(.material-symbols-outlined) {
+            display: none;
+        }
+        #yt-sidebar.collapsed .nav-item {
+            flex-direction: column;
+            padding: 14px 0;
+            font-size: 10px;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .nav-section {
+            border-bottom: 1px solid var(--yt-border-color);
+            padding-bottom: 12px;
+            margin-bottom: 12px;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            padding: 10px 12px;
+            color: var(--yt-text-primary);
+            text-decoration: none;
+            border-radius: 10px;
+            font-size: 14px;
+            transition: background 0.2s;
+            cursor: pointer;
+            border: none;
+            background: none;
+            width: 100%;
+            text-align: left;
+        }
+
+        .nav-item:hover { background-color: var(--yt-hover-bg); }
+        .nav-item.active {
+            background-color: var(--yt-hover-bg);
+            font-weight: 500;
+        }
+
+        .nav-item .material-symbols-outlined {
+            font-size: 24px;
+        }
+
+        /* サイドバー展開用メニュー */
+        .more-items {
+            display: none;
+        }
+
+        #yt-main {
+            flex: 1;
+            margin-left: 240px;
+            padding: 16px 24px;
+            transition: margin-left 0.2s ease;
+        }
+
+        #yt-main.expanded {
+            margin-left: 72px;
+        }
+
+        /* --- レスポンシブ表示設定 (画面の大きさに合わせた表示切り替え) --- */
+        @media (max-width: 792px) {
+            #yt-sidebar {
+                transform: translateX(-100%);
+                width: 240px !important;
+            }
+            #yt-sidebar.mobile-open {
+                transform: translateX(0);
+            }
+            #yt-sidebar .nav-item span:not(.material-symbols-outlined) {
+                display: inline !important;
+            }
+            #yt-sidebar .nav-item {
+                flex-direction: row !important;
+                padding: 10px 12px !important;
+                font-size: 14px !important;
+                justify-content: flex-start !important;
+                gap: 24px !important;
+            }
+            #yt-main, #yt-main.expanded {
+                margin-left: 0 !important;
+                padding: 12px 16px;
+            }
+            .header-center {
+                max-width: none;
+            }
+        }
+
+        @media (max-width: 480px) {
+            #yt-header {
+                padding: 0 8px;
+            }
+            .search-input-wrapper input {
+                padding: 0 12px;
+                font-size: 14px;
+            }
+            .search-btn {
+                width: 48px;
+            }
+            #yt-main {
+                padding: 8px 12px;
+            }
+            .status-toast {
+                left: 12px;
+                right: 12px;
+                bottom: 12px;
+            }
+        }
+
+        /* --- Status Toast (お知らせ通知) --- */
+        .status-toast {
+            position: fixed;
+            bottom: 24px;
+            left: 24px;
+            background: #212121;
+            color: #fff;
+            padding: 12px 18px;
+            border-radius: 8px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            z-index: 2000;
+            font-size: 14px;
+            border-left: 4px solid var(--yt-brand-red);
+        }
+
+        .status-toast .close-btn {
+            background: none;
+            border: none;
+            color: #aaa;
+            cursor: pointer;
+            padding: 0;
+            display: flex;
+        }
+
+        /* YouTube Official-Style Autocomplete Overrides (ライト/ダーク対応) */
+        .ui-autocomplete {
+            background-color: var(--yt-suggest-bg) !important;
+            border: 1px solid var(--yt-border-color) !important;
+            border-radius: 12px !important;
+            color: var(--yt-text-primary) !important;
+            box-shadow: 0 4px 16px var(--yt-suggest-shadow) !important;
+            padding: 8px 0 !important;
+            margin-top: 4px;
+            font-family: inherit;
+            z-index: 1050 !important;
+        }
+        .ui-menu-item {
+            list-style: none !important;
+            padding: 0 4px !important;
+        }
+        .ui-menu-item-wrapper {
+            padding: 6px 12px !important;
+            display: flex !important;
+            align-items: center !important;
+            gap: 16px;
+            font-size: 15px;
+            font-weight: 400;
+            color: var(--yt-text-primary) !important;
+            background-color: transparent !important;
+            border: none !important;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.1s ease;
+        }
+        .ui-menu-item-wrapper.ui-state-active {
+            background-color: var(--yt-hover-bg) !important;
+            color: var(--yt-text-primary) !important;
+            margin: 0 !important;
+            font-weight: 500;
+        }
+        .suggest-item-content {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            width: 100%;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: var(--yt-text-primary);
+        }
+        .suggest-item-content .suggest-icon {
+            font-size: 20px;
+            color: var(--yt-text-secondary);
+            flex-shrink: 0;
+        }
+        .suggest-item-content .suggest-text {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: var(--yt-text-primary);
+        }
+    </style>
+    {% block extra_css %}{% endblock %}
+    <script>
+        // テーマの即時反映（ちらつき防止）
+        (function() {
+            const savedTheme = localStorage.getItem('pref_theme') || 'system';
+            const htmlEl = document.documentElement;
+            htmlEl.classList.remove('dark', 'light', 'light-glass');
+            if (savedTheme === 'dark') {
+                htmlEl.classList.add('dark');
+            } else if (savedTheme === 'light') {
+                htmlEl.classList.add('light');
+            } else if (savedTheme === 'light-glass') {
+                htmlEl.classList.add('light-glass');
+            }
+        })();
+    </script>
+</head>
+<body>
+
+    <header id="yt-header">
+        <div class="header-start">
+            <button class="icon-btn" id="menu-toggle" title="ナビゲーション">
+                <span class="material-symbols-outlined">menu</span>
+            </button>
+            <a href="/" class="yt-logo-icon" title="ホーム">
+                <svg viewBox="0 0 68 48" width="30" height="22">
+                    <path d="M66.52,7.74c-0.78-2.93-2.49-5.41-5.42-6.19C55.79,.13,34,0,34,0S12.21,.13,6.9,1.55 C3.97,2.33,2.27,4.81,1.48,7.74C0.06,13.05,0,24,0,24s0.06,10.95,1.48,16.26c0.78,2.93,2.49,5.41,5.42,6.19 C12.21,47.87,34,48,34,48s21.79-0.13,27.1-1.55c2.93-0.78,4.64-3.26,5.42-6.19C67.94,34.95,68,24,68,24S67.94,13.05,66.52,7.74z" fill="#FF0000"/>
+                    <path d="M 45,24 27,14 27,34" fill="#FFFFFF"/>
+                </svg>
+            </a>
+        </div>
+
+        <div class="header-center">
+            <form action="/search" method="get" class="search-form" id="search-form">
+                <div class="search-input-wrapper">
+                    <input id="searchbox" name="q" type="search" placeholder="検索" autocomplete="off" spellcheck="false" autofocus>
+                </div>
+                <button type="submit" class="search-btn" title="検索">
+                    <span class="material-symbols-outlined">search</span>
+                </button>
+            </form>
+        </div>
+
+        <div class="header-end">
+        </div>
+    </header>
+
+    <div class="yt-container">
+        <aside id="yt-sidebar" class="collapsed">
+            <div class="nav-section">
+                <a href="/" class="nav-item active">
+                    <span class="material-symbols-outlined">home</span>
+                    <span>ホーム</span>
+                </a>
+                <a href="/subscriptions" class="nav-item">
+                    <span class="material-symbols-outlined">subscriptions</span>
+                    <span>登録チャンネル</span>
+                </a>
+            </div>
+
+            <div class="nav-section">
+                <a href="/history" class="nav-item">
+                    <span class="material-symbols-outlined">history</span>
+                    <span>履歴</span>
+                </a>
+                <a href="/setting" class="nav-item">
+                    <span class="material-symbols-outlined">settings</span>
+                    <span>設定</span>
+                </a>
+                <a href="/other" class="nav-item">
+                    <span class="material-symbols-outlined">more_horiz</span>
+                    <span>その他</span>
+                </a>
+            </div>
+        </aside>
+
+        <main id="yt-main" class="expanded animate-fade-in-main">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+    <script>
+        $(document).ready(function () {
+            // サイドバー開閉切り替え
+            $("#menu-toggle").click(function () {
+                if ($(window).width() <= 792) {
+                    $("#yt-sidebar").toggleClass("mobile-open");
+                } else {
+                    $("#yt-sidebar").toggleClass("collapsed");
+                    $("#yt-main").toggleClass("expanded");
+                }
+            });
+
+            // --- 検索履歴管理機能 (localStorage / 最大5件) ---
+            const HISTORY_KEY = 'yt_search_history';
+
+            function getSearchHistory() {
+                try {
+                    return JSON.parse(localStorage.getItem(HISTORY_KEY)) || [];
+                } catch(e) {
+                    return [];
+                }
+            }
+
+            function saveSearchQuery(query) {
+                if (!query || !query.trim()) return;
+                let history = getSearchHistory();
+                const cleanQuery = query.trim();
+                // 重複を除去
+                history = history.filter(item => item !== cleanQuery);
+                // 先頭に追加
+                history.unshift(cleanQuery);
+                // 最新5件のみ保存
+                if (history.length > 5) history = history.slice(0, 5);
+                localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+            }
+
+            // 動画URLから動画IDを抽出する関数
+            function extractVideoId(url) {
+                const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+                const match = url.match(regExp);
+                return (match && match[2].length === 11) ? match[2] : null;
+            }
+
+            // 検索実行時にURL判定・履歴を保存
+            $("#search-form").on("submit", function(e) {
+                const query = $("#searchbox").val().trim();
+                const videoId = extractVideoId(query);
+                
+                if (videoId) {
+                    e.preventDefault();
+                    window.location.href = "/select?v=" + videoId;
+                    return false;
+                }
+                
+                saveSearchQuery(query);
+            });
+
+            // --- 検索オートコンプリート（履歴 & サジェスト & 高速化 & UI強化） ---
+            const suggestCache = {};
+            let currentXhr = null;
+
+            $('#searchbox').autocomplete({
+                delay: 0,
+                minLength: 0, // 0文字（フォーカス時）で履歴を表示
+                source: function (request, response) {
+                    const term = request.term.trim();
+
+                    // 空入力時は検索履歴（最大5件）を表示
+                    if (term === "") {
+                        const history = getSearchHistory().map(item => ({
+                            label: item,
+                            isHistory: true
+                        }));
+                        response(history);
+                        return;
+                    }
+
+                    // キャッシュ確認
+                    if (term in suggestCache) {
+                        response(suggestCache[term]);
+                        return;
+                    }
+
+                    // 前回リクエストの中止
+                    if (currentXhr) {
+                        currentXhr.abort();
+                    }
+
+                    currentXhr = $.ajax({
+                        url: "/suggest",
+                        dataType: "json",
+                        data: { keyword: term },
+                        success: function (data) {
+                            const formattedData = data.map(item => ({
+                                label: typeof item === "string" ? item : item.label,
+                                isHistory: false
+                            }));
+                            suggestCache[term] = formattedData;
+                            response(formattedData);
+                        },
+                        error: function (jqXHR, textStatus) {
+                            if (textStatus !== 'abort') {
+                                response([]);
+                            }
+                        }
+                    });
+                },
+                select: function(event, ui) {
+                    const videoId = extractVideoId(ui.item.label);
+                    if (videoId) {
+                        event.preventDefault();
+                        window.location.href = "/select?v=" + videoId;
+                        return false;
+                    }
+                    saveSearchQuery(ui.item.label);
+                }
+            }).focus(function() {
+                // 入力欄にフォーカスした際に履歴を表示できるように発火
+                $(this).autocomplete("search", $(this).val());
+            }).autocomplete("instance")._renderItem = function(ul, item) {
+                const iconName = item.isHistory ? "history" : "search";
+                return $("<li>")
+                    .append(`
+                        <div class="suggest-item-content">
+                            <span class="material-symbols-outlined suggest-icon">${iconName}</span>
+                            <span class="suggest-text">${item.label}</span>
+                        </div>
+                    `)
+                    .appendTo(ul);
+            };
+
+            $("#closeToast").click(function () {
+                $("#statusToast").fadeOut(300);
+            });
+        });
+    </script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

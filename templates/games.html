@@ -1,200 +1,910 @@
 <!DOCTYPE html>
 <html lang="ja">
-
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Games - 仙人Tube</title>
-    <link rel="icon" href="/img/logo/favicon.ico">
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&family=Poppins:wght@600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gaming Client - Fullscreen</title>
+  <style>
+    :root {
+      --bg-dark: #070709;
+      --sidebar-bg: rgba(12, 12, 16, 0.75);
+      --card-bg: rgba(22, 22, 30, 0.55);
+      --glass-border: rgba(255, 255, 255, 0.08);
+      --glass-border-hover: rgba(208, 2, 27, 0.5);
+      --accent-red: #d0021b;
+      --accent-red-hover: #ff1e38;
+      --accent-glow: rgba(208, 2, 27, 0.4);
+      --text-main: #f9f9f9;
+      --text-muted: #8e8e9f;
+    }
 
-    <style>
-        :root {
-            --primary-gradient: linear-gradient(135deg, #007bff, #00c6ff);
-            --bg-light: #f8f9fa;
-            --card-bg: #ffffff;
-            --text-main: #2d3436;
-            --text-sub: #636e72;
-            --accent-color: #007bff;
-        }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      user-select: none;
+    }
 
-        @media (prefers-color-scheme: dark) {
-            :root {
-                --bg-light: #0f172a;
-                --card-bg: #1e293b;
-                --text-main: #f1f5f9;
-                --text-sub: #94a3b8;
-                --accent-color: #38bdf8;
-            }
-        }
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      position: relative;
+    }
 
-        body {
-            font-family: 'Noto Sans JP', sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: var(--bg-light);
-            color: var(--text-main);
-            line-height: 1.6;
-            overflow-x: hidden;
-        }
+    /* --- 1. 背景アニメーション --- */
+    .bg-canvas {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      background: 
+        radial-gradient(circle at 10% 20%, rgba(208, 2, 27, 0.18) 0%, transparent 40%),
+        radial-gradient(circle at 90% 80%, rgba(208, 2, 27, 0.12) 0%, transparent 45%),
+        radial-gradient(circle at 50% 50%, rgba(15, 15, 25, 0.8) 0%, #050508 100%);
+    }
 
-        #top-bar {
-            position: fixed;
-            top: 0;
-            width: 100%;
-            background: rgba(255, 255, 255, 0.7);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            z-index: 1000;
-            padding: 15px 5%;
-            display: flex;
-            align-items: center;
-            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.03);
-            box-sizing: border-box;
-        }
+    .bg-grid {
+      position: absolute;
+      inset: 0;
+      background-image: 
+        linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+      background-size: 50px 50px;
+      z-index: 0;
+      pointer-events: none;
+      opacity: 0.6;
+    }
 
-        #top-bar a {
-            text-decoration: none;
-            color: var(--text-main);
-            font-weight: 700;
-            font-size: 0.95rem;
-            transition: opacity 0.2s;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
+    /* --- 2. 独自スタイルのシステム起動ローダー --- */
+    .app-loader-flash {
+      position: fixed;
+      inset: 0;
+      background-color: #030305;
+      z-index: 9999;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      animation: loaderFadeOut 0.8s cubic-bezier(0.7, 0, 0.84, 0) 1.2s forwards;
+    }
 
-        #top-bar a:hover {
-            opacity: 0.7;
-        }
+    .cyber-core {
+      position: relative;
+      width: 100px;
+      height: 100px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
 
-        #contents {
-            padding: 120px 20px 60px;
-            max-width: 1100px;
-            margin: 0 auto;
-        }
+    .core-ring {
+      position: absolute;
+      inset: 0;
+      border: 2px solid transparent;
+      border-top-color: var(--accent-red);
+      border-radius: 50%;
+      animation: coreSpin 1s linear infinite;
+    }
 
-        .header-group {
-            text-align: center;
-            margin-bottom: 40px;
-        }
+    .core-ring-outer {
+      position: absolute;
+      inset: -12px;
+      border: 1px dashed rgba(208, 2, 27, 0.5);
+      border-radius: 50%;
+      animation: coreSpinReverse 2s linear infinite;
+    }
 
-        h2 {
-            font-family: 'Poppins', 'Noto Sans JP', sans-serif;
-            font-size: 2.5rem;
-            margin: 0;
-            background: var(--primary-gradient);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            display: inline-flex;
-            align-items: center;
-            gap: 15px;
-        }
+    .core-dot {
+      width: 16px;
+      height: 16px;
+      background: var(--accent-red);
+      box-shadow: 0 0 20px var(--accent-red), 0 0 40px #fff;
+      transform: rotate(45deg);
+      animation: corePulse 0.8s ease-in-out infinite alternate;
+    }
 
-        .game-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-            gap: 25px;
-        }
+    .loader-text {
+      margin-top: 32px;
+      font-size: 0.8rem;
+      letter-spacing: 6px;
+      color: var(--text-main);
+      font-weight: 900;
+      text-transform: uppercase;
+      text-shadow: 0 0 10px var(--accent-glow);
+    }
 
-        .game-card {
-            background: var(--card-bg);
-            border-radius: 20px;
-            padding: 30px 20px;
-            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.05);
-            text-decoration: none;
-            color: inherit;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
+    @keyframes coreSpin {
+      to { transform: rotate(360deg); }
+    }
+    @keyframes coreSpinReverse {
+      to { transform: rotate(-360deg); }
+    }
+    @keyframes corePulse {
+      0% { transform: scale(0.8) rotate(45deg); opacity: 0.5; }
+      100% { transform: scale(1.3) rotate(45deg); opacity: 1; }
+    }
+    @keyframes loaderFadeOut {
+      0% { opacity: 1; }
+      100% { opacity: 0; visibility: hidden; }
+    }
 
-        .game-card:hover {
-            border-color: var(--accent-color);
-        }
+    /* --- 3. フルスクリーンクライアント構造 --- */
+    .client-container {
+      display: flex;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+      backdrop-filter: blur(10px);
+    }
 
-        .icon-wrapper {
-            width: 80px;
-            height: 80px;
-            background: var(--bg-light);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 20px;
-        }
+    .sidebar {
+      width: 80px;
+      background: var(--sidebar-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-right: 1px solid var(--glass-border);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 30px 0;
+      gap: 24px;
+      z-index: 10;
+      flex-shrink: 0;
+    }
 
-        .game-card i {
-            font-size: 2.5rem;
-            color: var(--accent-color);
-        }
+    .brand-icon {
+      width: 36px;
+      height: 36px;
+      background-color: var(--accent-red);
+      clip-path: polygon(0 0, 100% 0, 80% 100%, 0 100%);
+      margin-bottom: 24px;
+      box-shadow: 0 0 20px var(--accent-glow);
+      position: relative;
+    }
 
-        .game-card span {
-            font-weight: 700;
-            font-size: 1.1rem;
-        }
+    .brand-icon::after {
+      content: '';
+      position: absolute;
+      inset: -4px;
+      background: var(--accent-red);
+      clip-path: inherit;
+      filter: blur(8px);
+      opacity: 0.6;
+      z-index: -1;
+    }
 
-        @media (max-width: 600px) {
-            .game-grid {
-                grid-template-columns: repeat(2, 1fr);
-                gap: 15px;
-            }
+    .nav-icon {
+      width: 50px;
+      height: 50px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+      position: relative;
+    }
 
-            .game-card {
-                padding: 20px 10px;
-            }
+    .nav-icon svg {
+      width: 24px;
+      height: 24px;
+      fill: currentColor;
+    }
 
-            .icon-wrapper {
-                width: 60px;
-                height: 60px;
-            }
+    .nav-icon:hover {
+      color: var(--text-main);
+      background-color: rgba(255, 255, 255, 0.06);
+      transform: translateY(-2px);
+    }
 
-            .game-card i {
-                font-size: 1.8rem;
-            }
+    .nav-icon.active {
+      color: var(--text-main);
+      background: rgba(208, 2, 27, 0.15);
+      border: 1px solid rgba(208, 2, 27, 0.3);
+    }
 
-            h2 {
-                font-size: 1.8rem;
-            }
-        }
-    </style>
+    .nav-icon.active::before {
+      content: '';
+      position: absolute;
+      left: -15px;
+      top: 12px;
+      bottom: 12px;
+      width: 4px;
+      background-color: var(--accent-red);
+      border-radius: 0 4px 4px 0;
+      box-shadow: 0 0 12px var(--accent-red);
+    }
+
+    .main-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .header {
+      height: 90px;
+      padding: 0 50px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--glass-border);
+      background: rgba(10, 10, 15, 0.4);
+      backdrop-filter: blur(10px);
+    }
+
+    .page-title-group {
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+    }
+
+    .page-title {
+      color: var(--text-main);
+      font-size: 2.2rem;
+      font-weight: 900;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      text-shadow: 0 0 20px rgba(0,0,0,0.8);
+    }
+
+    .game-count {
+      color: var(--accent-red);
+      font-weight: 800;
+      font-size: 0.9rem;
+      letter-spacing: 1px;
+    }
+
+    .search-box {
+      position: relative;
+      width: 300px;
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 10px 16px 10px 42px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--glass-border);
+      border-radius: 20px;
+      color: var(--text-main);
+      font-size: 0.85rem;
+      outline: none;
+      transition: all 0.3s ease;
+    }
+
+    .search-input:focus {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: var(--accent-red);
+      box-shadow: 0 0 15px rgba(208, 2, 27, 0.25);
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 16px;
+      height: 16px;
+      fill: var(--text-muted);
+      pointer-events: none;
+    }
+
+    .games-scroll-area {
+      flex: 1;
+      padding: 40px 50px;
+      overflow-y: auto;
+      perspective: 1000px;
+    }
+
+    .games-scroll-area::-webkit-scrollbar {
+      width: 8px;
+    }
+    .games-scroll-area::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+    }
+    .games-scroll-area::-webkit-scrollbar-thumb:hover {
+      background: var(--accent-red);
+    }
+
+    .games-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 32px;
+      padding-bottom: 40px;
+    }
+
+    /* --- 4. 3Dチルト対応 ゲームカード --- */
+    .game-card {
+      position: relative;
+      height: 380px;
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-radius: 16px;
+      overflow: hidden;
+      cursor: pointer;
+      border: 1px solid var(--glass-border);
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
+      transform-style: preserve-3d;
+      transition: transform 0.15s ease-out, border-color 0.3s ease, box-shadow 0.3s ease;
+      opacity: 0;
+      animation: cardCascade 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    .game-card:nth-child(1) { animation-delay: 0.5s; }
+    .game-card:nth-child(2) { animation-delay: 0.6s; }
+    .game-card:nth-child(3) { animation-delay: 0.7s; }
+    .game-card:nth-child(4) { animation-delay: 0.8s; }
+    .game-card:nth-child(5) { animation-delay: 0.9s; }
+    .game-card:nth-child(6) { animation-delay: 1.0s; }
+
+    @keyframes cardCascade {
+      0% {
+        opacity: 0;
+        transform: translateY(40px) scale(0.92);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    .game-card:hover {
+      border-color: var(--glass-border-hover);
+      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.7), 0 0 30px var(--accent-glow);
+    }
+
+    .card-glare {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(255, 255, 255, 0.15) 0%, transparent 60%);
+      pointer-events: none;
+      z-index: 3;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    .game-card:hover .card-glare {
+      opacity: 1;
+    }
+
+    .card-bg {
+      width: 100%;
+      height: 100%;
+      background-size: cover;
+      background-position: center;
+      transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .game-card:hover .card-bg {
+      transform: scale(1.08);
+    }
+
+    .fav-btn {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 4;
+      transition: all 0.2s ease;
+      color: var(--text-muted);
+    }
+
+    .fav-btn svg {
+      width: 18px;
+      height: 18px;
+      fill: currentColor;
+    }
+
+    .fav-btn:hover {
+      transform: scale(1.15);
+      color: #ffd700;
+      background: rgba(0, 0, 0, 0.8);
+    }
+
+    .fav-btn.active {
+      color: #ffd700;
+      border-color: rgba(255, 215, 0, 0.4);
+      box-shadow: 0 0 10px rgba(255, 215, 0, 0.3);
+    }
+
+    .card-overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(0,0,0,0) 30%, rgba(5, 5, 8, 0.95) 100%);
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      padding: 24px;
+      z-index: 2;
+      transform: translateZ(20px);
+    }
+
+    .game-genre {
+      color: var(--accent-red);
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+      text-shadow: 0 0 10px var(--accent-glow);
+    }
+
+    .game-name {
+      color: var(--text-main);
+      font-size: 1.35rem;
+      font-weight: 900;
+      letter-spacing: 1px;
+      margin-bottom: 16px;
+      text-transform: uppercase;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.9);
+    }
+
+    .play-btn {
+      width: 100%;
+      padding: 12px;
+      background: var(--accent-red);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      border-radius: 8px;
+      color: var(--text-main);
+      font-weight: 800;
+      font-size: 0.85rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      cursor: pointer;
+      opacity: 0;
+      transform: translateY(15px);
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 0 15px var(--accent-glow);
+    }
+
+    .game-card:hover .play-btn {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .play-btn:hover {
+      background-color: var(--accent-red-hover);
+      box-shadow: 0 0 25px rgba(255, 30, 56, 0.8);
+      transform: translateY(-2px);
+    }
+
+    /* 背景グラデーション */
+    .bg-block-blast { background: linear-gradient(135deg, #0d1b2a 0%, #1b263b 50%, #e0a96d 100%); }
+    .bg-tsumtsum    { background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 50%, #feada6 100%); }
+    .bg-paperio     { background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%); }
+    .bg-snowrider   { background: linear-gradient(135deg, #2b5876 0%, #4e4376 100%); }
+    .bg-projectx    { background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%); }
+    .bg-legends     { background: linear-gradient(135deg, #3a1c71 0%, #d76d77 50%, #ffaf7b 100%); }
+
+    /* --- 5. 解除可能・画像表示型 起動ローディングオーバーレイ --- */
+    .game-launch-overlay {
+      position: fixed;
+      inset: 0;
+      background: #030305;
+      z-index: 10000;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.4s ease;
+      overflow: hidden;
+    }
+
+    .game-launch-overlay.active {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    .launch-bg-image {
+      position: absolute;
+      inset: 0;
+      background-size: cover;
+      background-position: center;
+      filter: blur(25px) brightness(0.25);
+      transform: scale(1.1);
+      transition: background-image 0.3s ease;
+    }
+
+    .launch-content {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+      max-width: 450px;
+      padding: 0 20px;
+    }
+
+    .launch-thumb-box {
+      width: 180px;
+      height: 240px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8), 0 0 30px var(--accent-glow);
+      overflow: hidden;
+      margin-bottom: 28px;
+      background-size: cover;
+      background-position: center;
+      position: relative;
+    }
+
+    .launch-title {
+      font-size: 2.2rem;
+      font-weight: 900;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--text-main);
+      margin-bottom: 6px;
+      text-shadow: 0 0 15px rgba(0,0,0,0.8);
+    }
+
+    .launch-status {
+      color: var(--accent-red);
+      font-size: 0.8rem;
+      letter-spacing: 3px;
+      font-weight: 800;
+      margin-bottom: 24px;
+    }
+
+    .launch-progress-track {
+      width: 100%;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 2px;
+      overflow: hidden;
+      position: relative;
+      margin-bottom: 30px;
+    }
+
+    .launch-progress-bar {
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent-red), #ff4d61);
+      box-shadow: 0 0 12px var(--accent-red);
+      transition: width 0.1s linear;
+    }
+
+    .cancel-btn {
+      padding: 10px 24px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 20px;
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 2px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .cancel-btn:hover {
+      background: rgba(255, 255, 255, 0.15);
+      color: var(--text-main);
+      border-color: rgba(255, 255, 255, 0.4);
+    }
+
+    @media (max-width: 768px) {
+      .client-container { flex-direction: column; }
+      .sidebar {
+        width: 100%;
+        height: 65px;
+        flex-direction: row;
+        justify-content: space-around;
+        padding: 0 20px;
+        border-right: none;
+        border-bottom: 1px solid var(--glass-border);
+      }
+      .brand-icon { margin-bottom: 0; }
+      .nav-icon.active::before {
+        left: 10px; right: 10px; top: auto; bottom: -12px;
+        width: auto; height: 3px;
+      }
+      .header {
+        height: 70px;
+        padding: 0 20px;
+      }
+      .page-title { font-size: 1.5rem; }
+      .search-box { width: 180px; }
+      .games-scroll-area { padding: 20px; }
+      .games-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 16px; }
+      .game-card { height: 280px; }
+      .play-btn { opacity: 1; transform: translateY(0); padding: 8px; font-size: 0.75rem; }
+    }
+  </style>
 </head>
-
 <body>
-    <header id="top-bar">
-        <a href="/"><i class="fas fa-arrow-left"></i> 仙人Tubeに戻る</a>
-    </header>
 
-    <div id="contents">
-        <div class="header-group">
-            <h2><i class="fas fa-rocket"></i> ゲーム</h2>
-        </div>
-
-        <div class="game-grid">
-            <a href="/block.html" class="game-card">
-                <div class="icon-wrapper">
-                    <i class="fas fa-cubes"></i>
-                </div>
-                <span>ブロックブラスト</span>
-            </a>
-
-            <a href="/tumu.html" class="game-card">
-                <div class="icon-wrapper">
-                    <i class="fas fa-circle"></i>
-                </div>
-                <span>ツムツム</span>
-            </a>
-
-            <a href="/2048.html" class="game-card">
-                <div class="icon-wrapper">
-                    <i class="fas fa-th-large"></i>
-                </div>
-                <span>2048</span>
-            </a>
-        </div>
+  <!-- システム起動ローダー -->
+  <div class="app-loader-flash">
+    <div class="cyber-core">
+      <div class="core-ring-outer"></div>
+      <div class="core-ring"></div>
+      <div class="core-dot"></div>
     </div>
-</body>
+    <div class="loader-text">INITIALIZING ENGINE</div>
+  </div>
 
+  <div class="bg-canvas"></div>
+  <div class="bg-grid"></div>
+
+  <div class="client-container">
+
+    <!-- サイドバー -->
+    <div class="sidebar">
+      <div class="brand-icon"></div>
+      
+      <div class="nav-icon active" id="nav-all" title="GAMES">
+        <svg viewBox="0 0 24 24"><path d="M21 6H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-10 7H9v2H7v-2H5v-2h2V9h2v2h2v2zm4.5 1c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm3-3c-.83 0-1.5-.67-1.5-1.5S17.67 9 18.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>
+      </div>
+      
+      <div class="nav-icon" id="nav-fav" title="FAVORITES">
+        <svg viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>
+      </div>
+    </div>
+
+    <!-- メインコンテンツ -->
+    <div class="main-content">
+      
+      <div class="header">
+        <div class="page-title-group">
+          <h1 class="page-title" id="page-title">GAMES</h1>
+          <span class="game-count" id="game-count">6 TITLE(S)</span>
+        </div>
+
+        <div class="search-box">
+          <svg class="search-icon" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+          <input type="text" class="search-input" id="search-input" placeholder="Search games...">
+        </div>
+      </div>
+
+      <div class="games-scroll-area">
+        <div class="games-grid" id="games-grid">
+
+          <!-- 1. Block Blast (指定のURLへ遷移) -->
+          <div class="game-card" data-title="Block Blast" data-url="/gameview?=block.html" data-fav="false">
+            <div class="card-glare"></div>
+            <button class="fav-btn" title="Add to Favorites"><svg viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg></button>
+            <div class="card-bg bg-block-blast" style="background-image: url('img/games/blockblast.png');"></div>
+            <div class="card-overlay">
+              <span class="game-genre">Puzzle</span>
+              <h3 class="game-name">Block Blast</h3>
+              <button class="play-btn">PLAY</button>
+            </div>
+          </div>
+
+          <!-- 2. Tsum Tsum -->
+          <div class="game-card" data-title="Tsum Tsum" data-fav="false">
+            <div class="card-glare"></div>
+            <button class="fav-btn" title="Add to Favorites"><svg viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg></button>
+            <div class="card-bg bg-tsumtsum"></div>
+            <div class="card-overlay">
+              <span class="game-genre">Casual</span>
+              <h3 class="game-name">Tsum Tsum</h3>
+              <button class="play-btn">PLAY</button>
+            </div>
+          </div>
+
+          <!-- 3. Paper.io -->
+          <div class="game-card" data-title="Paper.io" data-fav="false">
+            <div class="card-glare"></div>
+            <button class="fav-btn" title="Add to Favorites"><svg viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg></button>
+            <div class="card-bg bg-paperio" style="background-image: url('img/games/paperio.png');"></div>
+            <div class="card-overlay">
+              <span class="game-genre">Strategy & IO</span>
+              <h3 class="game-name">Paper.io</h3>
+              <button class="play-btn">PLAY</button>
+            </div>
+          </div>
+
+          <!-- 4. Snow Rider -->
+          <div class="game-card" data-title="Snow Rider" data-fav="false">
+            <div class="card-glare"></div>
+            <button class="fav-btn" title="Add to Favorites"><svg viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg></button>
+            <div class="card-bg bg-snowrider" style="background-image: url('img/games/snowrider.png');"></div>
+            <div class="card-overlay">
+              <span class="game-genre">Action & Sports</span>
+              <h3 class="game-name">Snow Rider</h3>
+              <button class="play-btn">PLAY</button>
+            </div>
+          </div>
+
+          <!-- 5. PROJECT-X -->
+          <div class="game-card" data-title="PROJECT-X" data-fav="false">
+            <div class="card-glare"></div>
+            <button class="fav-btn" title="Add to Favorites"><svg viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg></button>
+            <div class="card-bg bg-projectx"></div>
+            <div class="card-overlay">
+              <span class="game-genre">Tactical Shooter</span>
+              <h3 class="game-name">PROJECT-X</h3>
+              <button class="play-btn">PLAY</button>
+            </div>
+          </div>
+
+          <!-- 6. LEGENDS -->
+          <div class="game-card" data-title="LEGENDS" data-fav="false">
+            <div class="card-glare"></div>
+            <button class="fav-btn" title="Add to Favorites"><svg viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg></button>
+            <div class="card-bg bg-legends"></div>
+            <div class="card-overlay">
+              <span class="game-genre">MOBA</span>
+              <h3 class="game-name">LEGENDS</h3>
+              <button class="play-btn">PLAY</button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 解除可能なゲーム起動用オーバーレイ -->
+  <div class="game-launch-overlay" id="launch-overlay">
+    <div class="launch-bg-image" id="launch-bg-img"></div>
+    <div class="launch-content">
+      <div class="launch-thumb-box" id="launch-thumb"></div>
+      <div class="launch-title" id="launch-game-title">GAME TITLE</div>
+      <div class="launch-status">LAUNCHING GAME CORE...</div>
+      
+      <div class="launch-progress-track">
+        <div class="launch-progress-bar" id="launch-progress"></div>
+      </div>
+
+      <button class="cancel-btn" id="cancel-launch-btn">CANCEL (ESC)</button>
+    </div>
+  </div>
+
+  <script>
+    // --- 1. 3D Tilt & Light Effect ---
+    const cards = document.querySelectorAll('.game-card');
+
+    cards.forEach(card => {
+      card.addEventListener('mousemove', (e) => {
+        const rect = card.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        const centerX = rect.width / 2;
+        const centerY = rect.height / 2;
+
+        const rotateX = ((y - centerY) / centerY) * -12;
+        const rotateY = ((x - centerX) / centerX) * 12;
+
+        const percentX = (x / rect.width) * 100;
+        const percentY = (y / rect.height) * 100;
+
+        card.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) translateY(-8px)`;
+        card.style.setProperty('--mouse-x', `${percentX}%`);
+        card.style.setProperty('--mouse-y', `${percentY}%`);
+      });
+
+      card.addEventListener('mouseleave', () => {
+        card.style.transform = 'perspective(1000px) rotateX(0deg) rotateY(0deg) translateY(0)';
+      });
+    });
+
+    // --- 2. お気に入り登録機能 ---
+    const favBtns = document.querySelectorAll('.fav-btn');
+    favBtns.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        btn.classList.toggle('active');
+        const card = btn.closest('.game-card');
+        const isFav = btn.classList.contains('active');
+        card.setAttribute('data-fav', isFav ? 'true' : 'false');
+      });
+    });
+
+    // --- 3. 検索フィルター ---
+    const searchInput = document.getElementById('search-input');
+    searchInput.addEventListener('input', (e) => {
+      const term = e.target.value.toLowerCase();
+      cards.forEach(card => {
+        const title = card.getAttribute('data-title').toLowerCase();
+        card.style.display = title.includes(term) ? 'block' : 'none';
+      });
+    });
+
+    // --- 4. サイドバー切り替え ---
+    const navAll = document.getElementById('nav-all');
+    const navFav = document.getElementById('nav-fav');
+    const pageTitle = document.getElementById('page-title');
+
+    navAll.addEventListener('click', () => {
+      navAll.classList.add('active');
+      navFav.classList.remove('active');
+      pageTitle.textContent = 'GAMES';
+      cards.forEach(card => card.style.display = 'block');
+    });
+
+    navFav.addEventListener('click', () => {
+      navFav.classList.add('active');
+      navAll.classList.remove('active');
+      pageTitle.textContent = 'FAVORITES';
+      cards.forEach(card => {
+        card.style.display = card.getAttribute('data-fav') === 'true' ? 'block' : 'none';
+      });
+    });
+
+    // --- 5. ゲーム起動処理（解除可能ローディング・画像連動・URL遷移） ---
+    const launchOverlay = document.getElementById('launch-overlay');
+    const launchGameTitle = document.getElementById('launch-game-title');
+    const launchThumb = document.getElementById('launch-thumb');
+    const launchBgImg = document.getElementById('launch-bg-img');
+    const launchProgress = document.getElementById('launch-progress');
+    const cancelLaunchBtn = document.getElementById('cancel-launch-btn');
+
+    let launchTimer = null;
+    let progressInterval = null;
+    let targetUrl = null;
+
+    function abortLaunch() {
+      if (launchTimer) clearTimeout(launchTimer);
+      if (progressInterval) clearInterval(progressInterval);
+      launchOverlay.classList.remove('active');
+      launchProgress.style.width = '0%';
+      targetUrl = null;
+    }
+
+    cards.forEach(card => {
+      card.addEventListener('click', () => {
+        const gameName = card.getAttribute('data-title');
+        const cardBg = card.querySelector('.card-bg');
+        const bgImgStyle = window.getComputedStyle(cardBg).backgroundImage;
+        targetUrl = card.getAttribute('data-url');
+
+        // 画像・プロパティの設定
+        launchGameTitle.textContent = gameName;
+        launchThumb.style.backgroundImage = bgImgStyle;
+        launchBgImg.style.backgroundImage = bgImgStyle;
+
+        launchOverlay.classList.add('active');
+        launchProgress.style.width = '0%';
+
+        // 進行度アニメーション (2秒)
+        let progress = 0;
+        progressInterval = setInterval(() => {
+          progress += 2;
+          launchProgress.style.width = `${progress}%`;
+          if (progress >= 100) clearInterval(progressInterval);
+        }, 40);
+
+        // 2.2秒後に遷移またはローディング解除
+        launchTimer = setTimeout(() => {
+          launchOverlay.classList.remove('active');
+          if (targetUrl) {
+            window.location.href = targetUrl;
+          }
+        }, 2200);
+      });
+    });
+
+    // キャンセルボタン & ESCキーでの解除対応
+    cancelLaunchBtn.addEventListener('click', abortLaunch);
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && launchOverlay.classList.contains('active')) {
+        abortLaunch();
+      }
+    });
+  </script>
+</body>
 </html>

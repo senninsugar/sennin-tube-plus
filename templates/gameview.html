@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gaming Client - Game View</title>
+  <style>
+    :root {
+      --bg-dark: #070709;
+      --sidebar-bg: rgba(12, 12, 16, 0.85);
+      --glass-border: rgba(255, 255, 255, 0.08);
+      --accent-red: #d0021b;
+      --accent-red-hover: #ff1e38;
+      --accent-glow: rgba(208, 2, 27, 0.4);
+      --text-main: #f9f9f9;
+      --text-muted: #8e8e9f;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      user-select: none;
+    }
+
+    body, html {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+    }
+
+    /* --- ゲーム埋め込み用 iframe --- */
+    .game-frame {
+      width: 100%;
+      height: 100%;
+      border: none;
+      display: block;
+      background-color: #000;
+    }
+
+    /* --- 上部ホバー検知エリア --- */
+    .top-hover-trigger {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 15px;
+      z-index: 10000;
+    }
+
+    /* --- 開閉可能コントロールバー --- */
+    .control-bar {
+      position: fixed;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%) translateY(-100%);
+      background: var(--sidebar-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      border-top: none;
+      border-radius: 0 0 16px 16px;
+      padding: 10px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      z-index: 9999;
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+    }
+
+    /* ホバー時およびピン留め時に開く */
+    .top-hover-trigger:hover + .control-bar,
+    .control-bar:hover,
+    .control-bar.pinned {
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .bar-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--glass-border);
+      border-radius: 8px;
+      color: var(--text-main);
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-decoration: none;
+    }
+
+    .bar-btn svg {
+      width: 18px;
+      height: 18px;
+      fill: currentColor;
+    }
+
+    .bar-btn:hover {
+      background: var(--accent-red);
+      border-color: rgba(255, 255, 255, 0.3);
+      box-shadow: 0 0 15px var(--accent-glow);
+      transform: translateY(-2px);
+    }
+
+    .bar-divider {
+      width: 1px;
+      height: 20px;
+      background: var(--glass-border);
+    }
+
+    .game-info {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      font-weight: 800;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .game-info-title {
+      color: var(--text-main);
+    }
+
+    /* エラー画面 */
+    .error-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      gap: 16px;
+    }
+
+    .error-title {
+      font-size: 1.8rem;
+      font-weight: 900;
+      color: var(--accent-red);
+      letter-spacing: 2px;
+    }
+
+    .error-msg {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 上部マウスオーバー反応エリア -->
+  <div class="top-hover-trigger"></div>
+
+  <!-- 開閉可能バー -->
+  <div class="control-bar" id="control-bar">
+    <a href="index.html" class="bar-btn" title="Return to Home">
+      <svg viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+      <span>HOME</span>
+    </a>
+
+    <button class="bar-btn" id="reload-btn" title="Reload Game">
+      <svg viewBox="0 0 24 24"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+    </button>
+
+    <button class="bar-btn" id="fullscreen-btn" title="Toggle Fullscreen">
+      <svg viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/></svg>
+    </button>
+
+    <div class="bar-divider"></div>
+
+    <div class="game-info">
+      <span>PLAYING:</span>
+      <span class="game-info-title" id="game-info-title">GAME</span>
+    </div>
+  </div>
+
+  <!-- ゲーム表示エリア -->
+  <iframe id="game-iframe" class="game-frame" allowfullscreen></iframe>
+
+  <script>
+    // URLのパラメータ解析 (例: ?=block.html から "block.html" を取得)
+    function getGameUrl() {
+      const search = window.location.search;
+      if (search.startsWith('?=')) {
+        return decodeURIComponent(search.substring(2));
+      } else if (search.startsWith('?')) {
+        return decodeURIComponent(search.substring(1));
+      }
+      return null;
+    }
+
+    const gameIframe = document.getElementById('game-iframe');
+    const gameInfoTitle = document.getElementById('game-info-title');
+    const targetGame = getGameUrl();
+
+    if (targetGame) {
+      gameIframe.src = targetGame;
+      
+      // ファイル名からタイトルを成形（例: "block.html" -> "BLOCK"）
+      const nameOnly = targetGame.split('/').pop().replace('.html', '');
+      gameInfoTitle.textContent = nameOnly.toUpperCase();
+    } else {
+      document.body.innerHTML = `
+        <div class="error-container">
+          <div class="error-title">NO GAME SPECIFIED</div>
+          <div class="error-msg">URLパラメータに表示対象のゲームが指定されていません。</div>
+          <a href="index.html" class="bar-btn" style="margin-top: 10px;">HOMEへ戻る</a>
+        </div>
+      `;
+    }
+
+    // 再読み込みボタン
+    document.getElementById('reload-btn')?.addEventListener('click', () => {
+      if (gameIframe.src) {
+        gameIframe.contentWindow.location.reload();
+      }
+    });
+
+    // フルスクリーン切り替えボタン
+    document.getElementById('fullscreen-btn')?.addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => {
+          console.error(`Error attempting to enable fullscreen: ${err.message}`);
+        });
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        }
+      }
+    });
+  </script>
+</body>
+</html>

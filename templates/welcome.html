@@ -1,0 +1,1032 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>仙人tube plus - Welcome Experience</title>
+  
+  <!-- 手書き風フォント（Caveat）の読み込み -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600&display=swap" rel="stylesheet">
+
+  <style>
+    /* ==========================================================
+       1. デザインシステム & カラーパレット
+       ========================================================== */
+    :root {
+      --g-blue: #4285f4;
+      --g-red: #ea4335;
+      --g-yellow: #fbbc05;
+      --g-green: #34a853;
+
+      /* ライトモード（コントラストを強めて視認性を確保） */
+      --bg-base: #f0f4f9;
+      --text-main: #111827;
+      --text-sub: #374151;
+      --btn-primary-bg: #1a73e8;
+      --btn-primary-text: #ffffff;
+      --btn-hover: #1557b0;
+      --glass-panel: rgba(255, 255, 255, 0.85);
+      --glass-border: rgba(255, 255, 255, 0.95);
+      --glass-shadow: 0 20px 50px rgba(0, 0, 0, 0.1);
+      --indicator-bg: rgba(0, 0, 0, 0.2);
+      --glow-color: rgba(26, 115, 232, 0.3);
+
+      /* カスタムスクロールバー用変数 */
+      --scrollbar-track: rgba(0, 0, 0, 0.05);
+      --scrollbar-thumb: rgba(0, 0, 0, 0.2);
+      --scrollbar-thumb-hover: rgba(0, 0, 0, 0.35);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        /* ダークモード */
+        --bg-base: #0a0e17;
+        --text-main: #f3f4f6;
+        --text-sub: #d1d5db;
+        --btn-primary-bg: #8ab4f8;
+        --btn-primary-text: #061121;
+        --btn-hover: #aecbfa;
+        --glass-panel: rgba(18, 24, 38, 0.85);
+        --glass-border: rgba(255, 255, 255, 0.18);
+        --glass-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+        --indicator-bg: rgba(255, 255, 255, 0.25);
+        --glow-color: rgba(138, 180, 248, 0.3);
+
+        /* カスタムスクロールバー用変数（ダーク） */
+        --scrollbar-track: rgba(255, 255, 255, 0.03);
+        --scrollbar-thumb: rgba(255, 255, 255, 0.2);
+        --scrollbar-thumb-hover: rgba(255, 255, 255, 0.4);
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background-color: var(--bg-base);
+      color: var(--text-main);
+      height: 100vh;
+      height: 100dvh;
+      width: 100vw;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* ==========================================================
+       2. 背景キャンバス & オーロラグロー
+       ========================================================== */
+    #particleCanvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    .ambient-glow {
+      position: absolute;
+      width: 70vw;
+      height: 70vw;
+      max-width: 800px;
+      max-height: 800px;
+      border-radius: 50%;
+      filter: blur(140px);
+      opacity: 0.35;
+      z-index: 0;
+      pointer-events: none;
+      animation: floatGlow 14s infinite alternate ease-in-out;
+    }
+
+    .glow-1 { top: -20%; left: -10%; background: var(--g-blue); }
+    .glow-2 { bottom: -20%; right: -10%; background: var(--g-red); animation-delay: -7s; }
+
+    @keyframes floatGlow {
+      0% { transform: translate(0, 0) scale(0.9); }
+      100% { transform: translate(50px, 30px) scale(1.1); }
+    }
+
+    /* 視認性向上のためのバックドロップオーバーレイ */
+    .bg-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.03);
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    /* ==========================================================
+       3. 手書き文字 Welcome (Boot Overlay)
+       ========================================================== */
+    .boot-overlay {
+      position: fixed;
+      inset: 0;
+      background: var(--bg-base);
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.8s;
+    }
+
+    .boot-overlay.hidden {
+      opacity: 0;
+      visibility: hidden;
+    }
+
+    /* 直書き＋手書きアニメーション welcome テキスト */
+    .glass-welcome {
+      font-family: 'Caveat', cursive;
+      font-size: 8rem;
+      color: var(--text-main);
+      text-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+      letter-spacing: 0.05em;
+      display: inline-flex;
+      background: none;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+      border: none;
+      padding: 0;
+      border-radius: 0;
+      box-shadow: none;
+      animation: none;
+    }
+
+    .glass-welcome span {
+      display: inline-block;
+      opacity: 0;
+      transform: translateY(15px) rotate(-5deg);
+      animation: writeChar 0.4s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+    }
+
+    .glass-welcome span:nth-child(1) { animation-delay: 0.1s; }
+    .glass-welcome span:nth-child(2) { animation-delay: 0.3s; }
+    .glass-welcome span:nth-child(3) { animation-delay: 0.5s; }
+    .glass-welcome span:nth-child(4) { animation-delay: 0.7s; }
+    .glass-welcome span:nth-child(5) { animation-delay: 0.9s; }
+    .glass-welcome span:nth-child(6) { animation-delay: 1.1s; }
+    .glass-welcome span:nth-child(7) { animation-delay: 1.3s; }
+
+    @keyframes writeChar {
+      0% {
+        opacity: 0;
+        transform: translateY(15px) rotate(-5deg) scale(0.8);
+        filter: blur(4px);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0) rotate(0deg) scale(1);
+        filter: blur(0);
+      }
+    }
+
+    /* ==========================================================
+       4. 全画面プレゼンテーション（レスポンシブ・レイアウト強化）
+       ========================================================== */
+    .fullscreen-wrapper {
+      position: relative;
+      z-index: 1;
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: clamp(20px, 4vh, 40px) clamp(20px, 5vw, 60px);
+      opacity: 0;
+      transform: scale(0.98);
+      transition: opacity 1s cubic-bezier(0.16, 1, 0.3, 1), transform 1s cubic-bezier(0.16, 1, 0.3, 1);
+      overflow: hidden;
+    }
+
+    .fullscreen-wrapper.show {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    /* ヘッダーブランドロゴ */
+    .top-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      flex-shrink: 0;
+      height: 40px;
+    }
+
+    .top-header svg {
+      width: 26px;
+      height: 26px;
+    }
+
+    /* スライド トラック */
+    .viewport-slider {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      width: 100%;
+      overflow: hidden;
+      min-height: 0;
+      margin: 10px 0;
+    }
+
+    .slider-track {
+      display: flex;
+      width: 100%;
+      height: 100%;
+      transition: transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .slide {
+      min-width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      padding: 10px 20px;
+      opacity: 0.15;
+      transform: scale(0.92) translateY(10px);
+      transition: opacity 0.7s ease, transform 0.7s ease;
+      pointer-events: none;
+      overflow-y: auto;
+      
+      scrollbar-width: thin;
+      scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+    }
+
+    .slide::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .slide::-webkit-scrollbar-track {
+      background: var(--scrollbar-track);
+      border-radius: 10px;
+    }
+
+    .slide::-webkit-scrollbar-thumb {
+      background: var(--scrollbar-thumb);
+      border-radius: 10px;
+      border: 1.5px solid transparent;
+      background-clip: content-box;
+      transition: background 0.2s ease;
+    }
+
+    .slide::-webkit-scrollbar-thumb:hover {
+      background: var(--scrollbar-thumb-hover);
+      border: 1.5px solid transparent;
+      background-clip: content-box;
+    }
+
+    .slide.active {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+      pointer-events: auto;
+    }
+
+    .slide-icon-badge {
+      width: clamp(64px, 10vh, 88px);
+      height: clamp(64px, 10vh, 88px);
+      border-radius: 24px;
+      background: var(--glass-panel);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1.5px solid var(--glass-border);
+      box-shadow: var(--glass-shadow);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: clamp(14px, 2.5vh, 24px);
+      flex-shrink: 0;
+    }
+
+    .slide-icon-badge svg {
+      width: clamp(32px, 5vh, 44px);
+      height: clamp(32px, 5vh, 44px);
+    }
+
+    .slide-title {
+      font-size: clamp(1.6rem, 4vw, 2.4rem);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: clamp(10px, 2vh, 16px);
+      line-height: 1.25;
+      max-width: 720px;
+      color: var(--text-main);
+      text-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    }
+
+    .slide-desc {
+      font-size: clamp(0.95rem, 2vw, 1.1rem);
+      color: var(--text-sub);
+      line-height: 1.6;
+      max-width: 600px;
+      font-weight: 500;
+    }
+
+    /* リンクボタン */
+    .link-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: clamp(14px, 2.5vh, 20px);
+      padding: 12px 24px;
+      background: var(--glass-panel);
+      border: 1.5px solid var(--glass-border);
+      border-radius: 100px;
+      color: var(--btn-primary-bg);
+      font-weight: 600;
+      text-decoration: none;
+      box-shadow: var(--glass-shadow);
+      transition: all 0.25s ease;
+      flex-shrink: 0;
+    }
+
+    .link-btn:hover {
+      transform: translateY(-2px);
+      background: var(--btn-primary-bg);
+      color: var(--btn-primary-text);
+    }
+
+    /* ==========================================================
+       4-B. 高級感のある「開発者 & デプロイ者」パネル（デザイン刷新）
+       ========================================================== */
+    .credits-container {
+      width: 100%;
+      max-width: 760px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      text-align: left;
+      margin: auto 0;
+      padding: 10px 0;
+    }
+
+    .credit-card {
+      position: relative;
+      background: var(--glass-panel);
+      backdrop-filter: blur(30px);
+      -webkit-backdrop-filter: blur(30px);
+      border: 1px solid var(--glass-border);
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.08);
+      border-radius: 24px;
+      padding: clamp(20px, 3vh, 28px);
+      transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+      overflow: hidden;
+    }
+
+    /* グラデーション線の流れるアニメーション設定 */
+    .credit-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--g-blue), var(--g-red), var(--g-yellow), var(--g-green), var(--g-blue));
+      background-size: 300% 100%;
+      opacity: 0.85;
+      animation: gradientFlow 4s linear infinite;
+    }
+
+    @keyframes gradientFlow {
+      0% { background-position: 0% 0%; }
+      100% { background-position: 100% 0%; }
+    }
+
+    .credit-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 24px 50px rgba(0, 0, 0, 0.14);
+      border-color: rgba(255, 255, 255, 0.4);
+    }
+
+    .credit-title {
+      font-size: clamp(1.1rem, 2.5vw, 1.3rem);
+      font-weight: 800;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: var(--text-main);
+      border-bottom: 1px solid rgba(128, 128, 128, 0.12);
+      padding-bottom: 14px;
+      letter-spacing: -0.01em;
+    }
+
+    .credit-title-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      background: rgba(66, 133, 244, 0.1);
+      color: var(--g-blue);
+      flex-shrink: 0;
+    }
+
+    .credit-title-icon.deployer-icon {
+      background: rgba(52, 168, 83, 0.1);
+      color: var(--g-green);
+    }
+
+    .credit-links-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .credit-link-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 18px;
+      background: rgba(128, 128, 128, 0.05);
+      border-radius: 16px;
+      color: var(--text-main);
+      text-decoration: none;
+      font-size: 0.95rem;
+      font-weight: 600;
+      border: 1px solid rgba(128, 128, 128, 0.1);
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      word-break: break-all;
+    }
+
+    .credit-link-item:hover {
+      border-color: var(--btn-primary-bg);
+      background: rgba(26, 115, 232, 0.08);
+      color: var(--btn-primary-bg);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
+    }
+
+    .credit-link-item svg {
+      flex-shrink: 0;
+      transition: transform 0.25s ease;
+    }
+
+    .credit-link-item:hover svg {
+      transform: scale(1.1);
+    }
+
+    .classroom-box {
+      margin-top: 18px;
+      padding: 12px 18px;
+      background: rgba(128, 128, 128, 0.04);
+      border-radius: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+      border: 1px dashed rgba(128, 128, 128, 0.2);
+    }
+
+    .classroom-label {
+      font-size: 0.88rem;
+      color: var(--text-sub);
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .credit-badge-code {
+      display: inline-block;
+      padding: 6px 16px;
+      background: var(--bg-base);
+      border: 1px solid rgba(128, 128, 128, 0.25);
+      border-radius: 10px;
+      font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--btn-primary-bg);
+      letter-spacing: 0.08em;
+      box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
+    }
+
+    .deployers-empty {
+      padding: 24px;
+      text-align: center;
+      color: var(--text-sub);
+      font-size: 0.95rem;
+      font-weight: 500;
+      background: rgba(128, 128, 128, 0.03);
+      border-radius: 16px;
+      border: 1.5px dashed rgba(128, 128, 128, 0.2);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* ==========================================================
+       5. 下部コントロールバー（常時固定表示）
+       ========================================================== */
+    .bottom-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      flex-shrink: 0;
+      height: 50px;
+      margin-top: 5px;
+      z-index: 10;
+    }
+
+    .indicators {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--indicator-bg);
+      cursor: pointer;
+      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .dot.active {
+      width: 28px;
+      border-radius: 14px;
+      background: var(--g-red);
+    }
+
+    .nav-buttons {
+      display: flex;
+      gap: 12px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 28px;
+      border-radius: 100px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      outline: none;
+    }
+
+    .btn-secondary {
+      background: var(--glass-panel);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      color: var(--text-main);
+      border: 1.5px solid var(--glass-border);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(128, 128, 128, 0.2);
+      transform: translateY(-2px);
+    }
+
+    .btn-primary {
+      background-color: var(--btn-primary-bg);
+      color: var(--btn-primary-text);
+      box-shadow: 0 8px 24px var(--glow-color);
+    }
+
+    .btn-primary:hover {
+      background-color: var(--btn-hover);
+      transform: translateY(-2px);
+      box-shadow: 0 12px 32px var(--glow-color);
+    }
+
+    .btn-primary:active {
+      transform: translateY(0);
+    }
+
+    /* レスポンシブ対応 */
+    @media (max-width: 768px) {
+      .fullscreen-wrapper { padding: 20px 16px; }
+      .glass-welcome { font-size: 4.5rem; }
+      .credit-links-grid { grid-template-columns: 1fr; }
+      .credit-card { padding: 18px; }
+      .btn { padding: 10px 20px; font-size: 0.9rem; }
+      .bottom-bar { height: 44px; }
+    }
+
+    /* ==========================================================
+       6. モーダルUI
+       ========================================================== */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.4s ease, visibility 0.4s;
+    }
+
+    .modal-backdrop.active {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .glass-modal {
+      background: var(--glass-panel);
+      backdrop-filter: blur(32px);
+      -webkit-backdrop-filter: blur(32px);
+      border: 1.5px solid var(--glass-border);
+      box-shadow: var(--glass-shadow);
+      border-radius: 28px;
+      padding: 32px;
+      max-width: 420px;
+      width: 90%;
+      text-align: center;
+      transform: scale(0.9) translateY(20px);
+      transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .modal-backdrop.active .glass-modal {
+      transform: scale(1) translateY(0);
+    }
+
+    .modal-title {
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin-bottom: 12px;
+      letter-spacing: -0.02em;
+    }
+
+    .modal-desc {
+      font-size: 0.95rem;
+      color: var(--text-sub);
+      line-height: 1.6;
+      margin-bottom: 24px;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+    }
+
+    .modal-actions .btn {
+      flex: 1;
+      padding: 12px 16px;
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 背景オーロラ & パーティクル -->
+  <div class="ambient-glow glow-1"></div>
+  <div class="ambient-glow glow-2"></div>
+  <div class="bg-overlay"></div>
+  <canvas id="particleCanvas"></canvas>
+
+  <!-- 1. アプリ起動画面（直書き＋手書き風アニメーション welcome） -->
+  <div class="boot-overlay" id="bootOverlay">
+    <div class="glass-welcome">
+      <span>w</span><span>e</span><span>l</span><span>c</span><span>o</span><span>m</span><span>e</span>
+    </div>
+  </div>
+
+  <!-- 2. 全画面チュートリアルUI -->
+  <div class="fullscreen-wrapper" id="mainWrapper">
+    <!-- ヘッダー -->
+    <header class="top-header">
+      <svg viewBox="0 0 24 24" fill="none">
+        <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" fill="var(--g-red)"/>
+      </svg>
+      <span>仙人tube plus</span>
+    </header>
+
+    <!-- スライド表示領域 -->
+    <main class="viewport-slider">
+      <div class="slider-track" id="sliderTrack">
+
+        <!-- Slide 1 -->
+        <section class="slide active">
+          <div class="slide-icon-badge">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="var(--g-blue)"/>
+              <path d="M2 17L12 22L22 17" stroke="var(--g-green)" stroke-width="2.5"/>
+              <path d="M2 12L12 17L22 12" stroke="var(--g-red)" stroke-width="2.5"/>
+            </svg>
+          </div>
+          <h1 class="slide-title">仙人tube plusへようこそ</h1>
+          <p class="slide-desc">
+            v1.3からv2に進化した仙人tube plusをお楽しみください。
+          </p>
+        </section>
+
+        <!-- Slide 2 -->
+        <section class="slide">
+          <div class="slide-icon-badge">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M13 2L3 14H12L11 22L21 10H12L13 2Z" fill="var(--g-yellow)" stroke="var(--g-red)" stroke-width="1.5"/>
+            </svg>
+          </div>
+          <h2 class="slide-title">デザインだけじゃない進化</h2>
+          <p class="slide-desc">
+            仙人tube plusはデザインだけではなくバックエンドまでこだわって開発しました。<br>
+            なので安定してるはず!!
+          </p>
+        </section>
+
+        <!-- Slide 3 -->
+        <section class="slide">
+          <div class="slide-icon-badge">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M4 17L10 11L14 15L20 9M20 9H15M20 9V14" stroke="var(--g-blue)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <h2 class="slide-title">デプロイしてくださる方へ</h2>
+          <p class="slide-desc">
+            リポジトリを更新してください。<br>
+            また、新しくデプロイしてくださる方は以下のボタンよりお進みください。
+          </p>
+          <a href="https://github.com/senninsugar/sennin-tube-plus" target="_blank" rel="noopener noreferrer" class="link-btn">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+            GitHub リポジトリへ移動
+          </a>
+        </section>
+
+        <!-- Slide 4 -->
+        <section class="slide">
+          <div class="slide-icon-badge">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" fill="var(--g-red)"/>
+            </svg>
+          </div>
+          <h2 class="slide-title">これからもよろしくお願いします</h2>
+          <p class="slide-desc">
+            ご意見や不具合のご報告など、お問い合わせは以下のフォームよりお願いいたします。
+          </p>
+          <a href="https://docs.google.com/forms/d/e/1FAIpQLSfEtpseIacNN6fkLUk5tPY8-mZwEXyZ3YsEPuhFZ32N0nxPNQ/viewform?usp=publish-editor" target="_blank" rel="noopener noreferrer" class="link-btn">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/></svg>
+            お問い合わせはこちら
+          </a>
+        </section>
+
+        <!-- Slide 5 -->
+        <section class="slide">
+          <div class="credits-container">
+            
+            <!-- 開発者情報 -->
+            <div class="credit-card">
+              <div class="credit-title">
+                <div class="credit-title-icon">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                </div>
+                <span>開発者：仙人@sugar</span>
+              </div>
+              <div class="credit-links-grid">
+                <a href="https://github.com/senninsugar" target="_blank" rel="noopener noreferrer" class="credit-link-item">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                  GitHub
+                </a>
+                <a href="https://padlet.com/sennin_sugar" target="_blank" rel="noopener noreferrer" class="credit-link-item">
+                  <svg width="18" height="18" viewBox="0 0 250 250" fill="currentColor">
+                    <g transform="translate(0,250) scale(0.1,-0.1)">
+                      <path d="M1215 2089 c-17 -5 -42 -21 -56 -36 -14 -16 -84 -164 -155 -330 -71 -167 -132 -303 -135 -303 -3 0 -108 56 -233 125 -126 69 -241 128 -256 132 -54 10 -110 -42 -110 -104 0 -16 117 -231 301 -552 166 -289 311 -538 321 -554 44 -63 101 -71 254 -37 l100 22 117 -25 c125 -27 164 -25 210 9 14 11 67 91 118 179 67 116 346 566 374 603 1 1 40 -16 86 -38 45 -22 95 -40 110 -40 38 0 77 35 85 75 5 29 -4 52 -66 167 -40 73 -80 139 -88 146 -11 8 -57 12 -148 12 l-132 0 -140 -60 c-78 -33 -143 -60 -145 -60 -3 0 -64 138 -137 308 -73 169 -140 315 -149 325 -30 36 -79 49 -126 36z m67 -71 c19 -14 418 -936 418 -964 0 -18 -125 -488 -140 -530 -5 -13 -23 -30 -40 -39 -30 -15 -38 -15 -152 11 l-120 28 6 40 c3 23 11 113 17 201 l12 160 204 60 c113 33 201 61 196 62 -5 2 -97 -10 -206 -25 l-197 -29 0 36 c0 84 -30 955 -33 958 -2 1 -10 -217 -18 -486 -8 -269 -17 -493 -21 -497 -6 -5 -405 43 -415 51 -8 5 409 951 423 962 22 16 46 17 66 1z m-678 -535 c127 -69 232 -127 233 -128 2 -1 -24 -64 -57 -140 -33 -76 -60 -148 -60 -159 0 -12 13 -70 30 -130 16 -61 28 -111 26 -113 -6 -6 -436 752 -436 769 0 14 10 23 29 27 2 1 108 -56 235 -126z m1629 -154 c26 -47 47 -93 47 -103 0 -24 -32 -20 -107 16 -38 18 -69 33 -70 33 -1 1 9 45 24 98 l26 97 17 -27 c9 -16 37 -67 63 -114z"/>
+                    </g>
+                  </svg>
+                  Padlet
+                </a>
+                <a href="https://scratch.mit.edu/users/senninch" target="_blank" rel="noopener noreferrer" class="credit-link-item">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--g-red)" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12l2 2 4-4"/></svg>
+                  Scratch
+                </a>
+              </div>
+              <div class="classroom-box">
+                <span class="classroom-label">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                  Classroom Code
+                </span>
+                <span class="credit-badge-code">kf6hp4j6</span>
+              </div>
+            </div>
+
+            <!-- デプロイしてくださった方々 -->
+            <div class="credit-card">
+              <div class="credit-title">
+                <div class="credit-title-icon deployer-icon">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                </div>
+                <span>デプロイしてくださった方々</span>
+              </div>
+              <div class="deployers-empty">
+                <span>まだいません</span>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+      </div>
+    </main>
+
+    <!-- 下部固定コントロール -->
+    <footer class="bottom-bar">
+      <div class="indicators" id="indicators">
+        <span class="dot active"></span>
+        <span class="dot"></span>
+        <span class="dot"></span>
+        <span class="dot"></span>
+        <span class="dot"></span>
+      </div>
+
+      <div class="nav-buttons">
+        <button class="btn btn-secondary" id="prevBtn" style="display: none;">戻る</button>
+        <button class="btn btn-primary" id="nextBtn">次へ</button>
+      </div>
+    </footer>
+  </div>
+
+  <!-- 3. 確認モーダルUI -->
+  <div class="modal-backdrop" id="confirmModal">
+    <div class="glass-modal">
+      <h3 class="modal-title">アプリを開始しますか？</h3>
+      <p class="modal-desc">
+        仙人tube plus のメイン画面へ移動します。
+      </p>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="modalCancelBtn">キャンセル</button>
+        <button class="btn btn-primary" id="modalOkBtn">スタート</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ==========================================================
+    // 1. パーティクルキャンバス制御
+    // ==========================================================
+    const canvas = document.getElementById('particleCanvas');
+    const ctx = canvas.getContext('2d');
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    const particles = Array.from({ length: 55 }, () => ({
+      x: Math.random() * window.innerWidth,
+      y: Math.random() * window.innerHeight,
+      radius: Math.random() * 2.5 + 1,
+      vx: (Math.random() - 0.5) * 0.3,
+      vy: (Math.random() - 0.5) * 0.3,
+      alpha: Math.random() * 0.5 + 0.2
+    }));
+
+    function animateParticles() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+      particles.forEach(p => {
+        p.x += p.vx;
+        p.y += p.vy;
+
+        if (p.x < 0) p.x = canvas.width;
+        if (p.x > canvas.width) p.x = 0;
+        if (p.y < 0) p.y = canvas.height;
+        if (p.y > canvas.height) p.y = 0;
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.fillStyle = isDark ? `rgba(255, 255, 255, ${p.alpha})` : `rgba(0, 0, 0, ${p.alpha * 0.35})`;
+        ctx.fill();
+      });
+
+      requestAnimationFrame(animateParticles);
+    }
+    animateParticles();
+
+    // ==========================================================
+    // 2. Bot判定 ＆ ブート制御
+    // ==========================================================
+    const bootOverlay = document.getElementById('bootOverlay');
+    const mainWrapper = document.getElementById('mainWrapper');
+
+    window.addEventListener('load', () => {
+      const startTime = Date.now();
+
+      setTimeout(() => {
+        const elapsedTime = Date.now() - startTime;
+        
+        // Bot判定
+        const isBot = navigator.webdriver || elapsedTime < 1000;
+
+        if (isBot) {
+          window.location.href = "https://www.google.com";
+        } else {
+          bootOverlay.classList.add('hidden');
+          mainWrapper.classList.add('show');
+        }
+      }, 2500);
+    });
+
+    // ==========================================================
+    // 3. スライド ＆ ナビゲーション制御
+    // ==========================================================
+    const track = document.getElementById('sliderTrack');
+    const slides = Array.from(track.children);
+    const dots = Array.from(document.getElementById('indicators').children);
+    const nextBtn = document.getElementById('nextBtn');
+    const prevBtn = document.getElementById('prevBtn');
+    const confirmModal = document.getElementById('confirmModal');
+    const modalCancelBtn = document.getElementById('modalCancelBtn');
+    const modalOkBtn = document.getElementById('modalOkBtn');
+
+    let currentIndex = 0;
+
+    function updateSlider(index) {
+      track.style.transform = `translateX(-${index * 100}%)`;
+
+      slides.forEach((slide, i) => {
+        slide.classList.toggle('active', i === index);
+        dots[i].classList.toggle('active', i === index);
+      });
+
+      prevBtn.style.display = index === 0 ? 'none' : 'inline-flex';
+      nextBtn.innerText = index === slides.length - 1 ? 'スタート' : '次へ';
+    }
+
+    nextBtn.addEventListener('click', () => {
+      if (currentIndex < slides.length - 1) {
+        currentIndex++;
+        updateSlider(currentIndex);
+      } else {
+        confirmModal.classList.add('active');
+      }
+    });
+
+    prevBtn.addEventListener('click', () => {
+      if (currentIndex > 0) {
+        currentIndex--;
+        updateSlider(currentIndex);
+      }
+    });
+
+    dots.forEach((dot, i) => {
+      dot.addEventListener('click', () => {
+        currentIndex = i;
+        updateSlider(currentIndex);
+      });
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (confirmModal.classList.contains('active')) return;
+      if (e.key === 'ArrowRight' && currentIndex < slides.length - 1) {
+        currentIndex++;
+        updateSlider(currentIndex);
+      } else if (e.key === 'ArrowLeft' && currentIndex > 0) {
+        currentIndex--;
+        updateSlider(currentIndex);
+      }
+    });
+
+    // ==========================================================
+    // 4. モーダル操作 & 初回訪問フラグの保存 ＆ 遷移
+    // ==========================================================
+    modalCancelBtn.addEventListener('click', () => {
+      confirmModal.classList.remove('active');
+    });
+
+    modalOkBtn.addEventListener('click', () => {
+      // 初回訪問フラグを設定（CookieとlocalStorageの両方に保存）
+      document.cookie = "welcome_seen=true; path=/; max-age=31536000; SameSite=Lax";
+      localStorage.setItem("welcome_seen", "true");
+
+      modalOkBtn.innerText = '起動中...';
+      modalOkBtn.style.pointerEvents = 'none';
+      
+      mainWrapper.style.opacity = '0';
+      confirmModal.style.opacity = '0';
+      
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 600);
+    });
+  </script>
+</body>
+</html>

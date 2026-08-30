@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+
+{% block title %}仙人tube plusについて - 仙人Tube{% endblock %}
+
+{% block extra_css %}
+<style>
+    .about-container {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 20px 0;
+    }
+
+    .about-header {
+        margin-bottom: 24px;
+        border-bottom: 1px solid var(--yt-border-color);
+        padding-bottom: 16px;
+    }
+
+    .about-header h1 {
+        font-size: 24px;
+        font-weight: 500;
+        margin: 0 0 8px 0;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .about-header h1 .material-symbols-outlined {
+        font-size: 32px;
+        color: var(--yt-brand-red);
+    }
+
+    .about-header p {
+        color: var(--yt-text-secondary);
+        font-size: 14px;
+        margin: 0;
+    }
+
+    /* 概要カード */
+    .about-card {
+        background-color: var(--yt-search-bg);
+        border: 1px solid var(--yt-border-color);
+        border-radius: 12px;
+        padding: 24px;
+        margin-bottom: 24px;
+    }
+
+    .about-card h2 {
+        font-size: 18px;
+        font-weight: 500;
+        margin: 0 0 12px 0;
+        border-bottom: 1px solid var(--yt-border-color);
+        padding-bottom: 8px;
+    }
+
+    .about-card p {
+        font-size: 14px;
+        line-height: 1.6;
+        color: var(--yt-text-primary);
+        margin: 0 0 12px 0;
+    }
+
+    .about-card p:last-child {
+        margin-bottom: 0;
+    }
+
+    /* 主な機能 Grid */
+    .features-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        gap: 16px;
+        margin-top: 16px;
+    }
+
+    .feature-item {
+        background-color: var(--yt-main-bg);
+        border: 1px solid var(--yt-border-color);
+        border-radius: 8px;
+        padding: 16px;
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+    }
+
+    .feature-item .material-symbols-outlined {
+        font-size: 24px;
+        color: var(--yt-brand-red);
+        flex-shrink: 0;
+    }
+
+    .feature-item h3 {
+        font-size: 15px;
+        font-weight: 500;
+        margin: 0 0 4px 0;
+    }
+
+    .feature-item p {
+        font-size: 13px;
+        color: var(--yt-text-secondary);
+        margin: 0;
+        line-height: 1.4;
+    }
+
+    /* 戻るボタンエリア */
+    .back-nav {
+        margin-top: 24px;
+    }
+
+    .back-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--yt-text-secondary);
+        text-decoration: none;
+        font-size: 14px;
+        transition: color 0.2s ease;
+    }
+
+    .back-link:hover {
+        color: var(--yt-text-primary);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="about-container">
+    <div class="about-header">
+        <h1>
+            <span class="material-symbols-outlined">stars</span>
+            仙人tube plusについて
+        </h1>
+        <p>アプリケーションの概要と提供機能について</p>
+    </div>
+
+    <!-- 概要セクション -->
+    <div class="about-card">
+        <h2>アプリの概要</h2>
+        <p><strong>仙人tube plus</strong> は、より快適で自由な動画閲覧・Web活用体験を提供するために構築・拡張されたプラットフォームです。</p>
+        <p>シンプルなユーザーインターフェースを保ちつつ、多彩なWebツールや外部サービスへのハブとしてご利用いただけます。</p>
+    </div>
+
+    <!-- 機能一覧セクション -->
+    <div class="about-card">
+        <h2>主な機能・特徴</h2>
+        <div class="features-grid">
+            <div class="feature-item">
+                <span class="material-symbols-outlined">sports_esports</span>
+                <div>
+                    <h3>ゲーム</h3>
+                    <p>手軽に遊べる各種ミニゲームの閲覧・プレイ環境を提供。</p>
+                </div>
+            </div>
+
+            <div class="feature-item">
+                <span class="material-symbols-outlined">vpn_lock</span>
+                <div>
+                    <h3>プロキシ＆ナレッジ</h3>
+                    <p>Webプロキシ機能および関連のproxywikiナレッジ。</p>
+                </div>
+            </div>
+
+            <div class="feature-item">
+                <span class="material-symbols-outlined">code</span>
+                <div>
+                    <h3>コードエディタ</h3>
+                    <p>ブラウザ上でコードの試行・確認ができる簡易エディタ。</p>
+                </div>
+            </div>
+
+            <div class="feature-item">
+                <span class="material-symbols-outlined">download</span>
+                <div>
+                    <h3>ytダウンローダー</h3>
+                    <p>動画・音声などの関連ツール連携機能。</p>
+                </div>
+            </div>
+
+            <div class="feature-item">
+                <span class="material-symbols-outlined">open_in_new</span>
+                <div>
+                    <h3>uiの更新</h3>
+                    <p>使いやすくなったかも</p>
+                </div>
+            </div>
+
+            <div class="feature-item">
+                <span class="material-symbols-outlined">rocket_launch</span>
+                <div>
+                    <h3>高速＆軽量設計</h3>
+                    <p>複数のapiを使用して安定しています</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="back-nav">
+        <a href="/other" class="back-link">
+            <span class="material-symbols-outlined">arrow_back</span>
+            その他へ戻る
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    $(document).ready(function() {
+    });
+</script>
+{% endblock %}

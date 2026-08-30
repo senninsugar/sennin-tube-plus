@@ -1,0 +1,301 @@
+{% extends "base.html" %}
+
+{% block title %}その他 - 仙人Tube{% endblock %}
+
+{% block extra_css %}
+<style>
+    .other-container {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 20px 0;
+    }
+
+    .other-header {
+        margin-bottom: 24px;
+        border-bottom: 1px solid var(--yt-border-color);
+        padding-bottom: 16px;
+    }
+
+    .other-header h1 {
+        font-size: 24px;
+        font-weight: 500;
+        margin: 0 0 8px 0;
+    }
+
+    .other-header p {
+        color: var(--yt-text-secondary);
+        font-size: 14px;
+        margin: 0;
+    }
+
+    /* メニューカード一覧 Grid */
+    .menu-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        gap: 16px;
+        margin-bottom: 32px;
+    }
+
+    .menu-card {
+        background-color: var(--yt-search-bg);
+        border: 1px solid var(--yt-border-color);
+        border-radius: 12px;
+        padding: 20px;
+        display: flex;
+        align-items: flex-start;
+        gap: 16px;
+        text-decoration: none;
+        color: var(--yt-text-primary);
+        transition: background-color 0.2s ease, border-color 0.2s ease;
+        cursor: pointer;
+    }
+
+    .menu-card:hover {
+        background-color: var(--yt-hover-bg);
+        border-color: var(--yt-text-secondary);
+    }
+
+    .menu-card .material-symbols-outlined {
+        font-size: 28px;
+        color: var(--yt-brand-red);
+        flex-shrink: 0;
+    }
+
+    .card-content h2 {
+        font-size: 16px;
+        font-weight: 500;
+        margin: 0 0 6px 0;
+    }
+
+    .card-content p {
+        font-size: 13px;
+        color: var(--yt-text-secondary);
+        margin: 0;
+        line-height: 1.4;
+    }
+
+    /* 仙人tube plusについての詳細エリア（初期は非表示） */
+    .about-details-section {
+        display: none;
+        background-color: var(--yt-search-bg);
+        border: 1px solid var(--yt-border-color);
+        border-radius: 12px;
+        padding: 24px;
+        margin-bottom: 32px;
+        animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(-8px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .about-details-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+        border-bottom: 1px solid var(--yt-border-color);
+        padding-bottom: 12px;
+    }
+
+    .about-details-header h3 {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .about-details-header h3 .material-symbols-outlined {
+        color: var(--yt-brand-red);
+    }
+
+    .close-btn-icon {
+        background: none;
+        border: none;
+        color: var(--yt-text-secondary);
+        cursor: pointer;
+        font-size: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 4px;
+        border-radius: 50%;
+    }
+
+    .close-btn-icon:hover {
+        background-color: var(--yt-hover-bg);
+        color: var(--yt-text-primary);
+    }
+
+    .about-details-body {
+        font-size: 14px;
+        line-height: 1.6;
+        color: var(--yt-text-primary);
+    }
+
+    .about-details-body p {
+        margin: 0 0 12px 0;
+    }
+
+    .about-details-body p:last-child {
+        margin-bottom: 0;
+    }
+
+    /* システム情報セクション */
+    .info-section {
+        background-color: var(--yt-search-bg);
+        border: 1px solid var(--yt-border-color);
+        border-radius: 12px;
+        padding: 20px;
+    }
+
+    .info-section h3 {
+        font-size: 16px;
+        font-weight: 500;
+        margin: 0 0 12px 0;
+    }
+
+    .info-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        font-size: 14px;
+    }
+
+    .info-list li {
+        display: flex;
+        justify-content: space-between;
+        padding: 8px 0;
+        border-bottom: 1px solid var(--yt-border-color);
+    }
+
+    .info-list li:last-child {
+        border-bottom: none;
+    }
+
+    .info-label {
+        color: var(--yt-text-secondary);
+    }
+
+    .info-value {
+        font-weight: 500;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="other-container">
+    <div class="other-header">
+        <h1>その他</h1>
+        <p>その他の機能、ツール、および仙人tube plusの概要</p>
+    </div>
+
+    <!-- リンクカードメニュー -->
+    <div class="menu-grid">
+        <a href="/games" class="menu-card">
+            <span class="material-symbols-outlined">sports_esports</span>
+            <div class="card-content">
+                <h2>ゲーム</h2>
+                <p>ブラウザで遊べる各種ミニゲーム一覧。</p>
+            </div>
+        </a>
+
+        <a href="/proxywiki" class="menu-card">
+            <span class="material-symbols-outlined">menu_book</span>
+            <div class="card-content">
+                <h2>proxywiki</h2>
+                <p>プロキシや回避策に関するナレッジベース。</p>
+            </div>
+        </a>
+
+        <a href="/proxy" class="menu-card">
+            <span class="material-symbols-outlined">vpn_lock</span>
+            <div class="card-content">
+                <h2>proxy</h2>
+                <p>Webプロキシツールにアクセスします。</p>
+            </div>
+        </a>
+
+        <a href="/editor" class="menu-card">
+            <span class="material-symbols-outlined">code</span>
+            <div class="card-content">
+                <h2>コードエディタ</h2>
+                <p>ブラウザ上でコードの記述や試行が可能です。</p>
+            </div>
+        </a>
+
+        <a href="/downloader" class="menu-card">
+            <span class="material-symbols-outlined">download</span>
+            <div class="card-content">
+                <h2>ytダウンローダー</h2>
+                <p>動画や音声のダウンロードツール。</p>
+            </div>
+        </a>
+
+        <a href="/other-sites" class="menu-card">
+            <span class="material-symbols-outlined">open_in_new</span>
+            <div class="card-content">
+                <h2>その他のyoutubesite</h2>
+                <p>その他のYouTube代替サイト・関連リンク集。</p>
+            </div>
+        </a>
+
+        <a href="/about" class="menu-card" id="btn-about-plus">
+            <span class="material-symbols-outlined">stars</span>
+            <div class="card-content">
+                <h2>仙人tube plusについて</h2>
+                <p>クリックして詳細と機能概要を表示します。</p>
+            </div>
+        </a>
+    </div>
+
+    <!-- 仙人tube plusについて（クリック時に展開されるエリア） -->
+    <div class="about-details-section" id="about-plus-details">
+        <div class="about-details-header">
+            <h3>
+                <span class="material-symbols-outlined">stars</span>
+                仙人tube plusについて
+            </h3>
+            <button class="close-btn-icon" id="btn-close-details" title="閉じる">
+                <span class="material-symbols-outlined">close</span>
+            </button>
+        </div>
+        <div class="about-details-body">
+            <p><strong>仙人tube plus</strong> は、より快適で自由な動画閲覧・Web活用体験を提供するために拡張された特別バージョンです。</p>
+            <p>軽量なUIデザインの維持に加え、各種ツール（プロキシ、コードエディタ、ダウンローダー等）や外部コンテンツへのスムーズなアクセスを実現しています。</p>
+        </div>
+    </div>
+
+    <!-- システム情報・ステータス -->
+    <div class="info-section">
+        <h3>アプリケーション情報</h3>
+        <ul class="info-list">
+            <li>
+                <span class="info-label">アプリ名</span>
+                <span class="info-value">仙人Tube Plus</span>
+            </li>
+            <li>
+                <span class="info-label">バージョン</span>
+                <span class="info-value">v2.0</span>
+            </li>
+            <li>
+                <span class="info-label">ステータス</span>
+                <span class="info-value" style="color: #4caf50;">正常稼働中</span>
+            </li>
+        </ul>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    $(document).ready(function() {
+        $("#btn-close-details").click(function() {
+            $("#about-plus-details").slideUp(200);
+        });
+    });
+</script>
+{% endblock %}

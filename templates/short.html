@@ -1,252 +1,560 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>{{ video_title }} - Shorts</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --bg-black: #000000;
-            --text-white: #ffffff;
-            --glass-bg: rgba(0, 0, 0, 0.6);
-            --overlay-bg: rgba(0, 0, 0, 0.9);
-            --menu-bg: #282828;
-            --comment-card-bg: rgba(255, 255, 255, 0.08);
-        }
+{% extends 'base.html' %}
 
-        body, html {
-            margin: 0; padding: 0; width: 100%; height: 100%;
-            background-color: var(--bg-black);
-            font-family: 'Noto Sans JP', sans-serif;
-            overflow: hidden; color: var(--text-white);
-        }
+{% block title %}{{ video_title }} - Shorts - 仙人Tube{% endblock %}
 
-        /* --- メインコンテナ --- */
+{% block extra_css %}
+<style>
+    /* --- Base.html 統合用 Shorts レイアウト --- */
+    #yt-main {
+        padding: 56px 0 0 0 !important;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: calc(100vh - 56px);
+        min-height: calc(100dvh - 56px);
+        background-color: var(--yt-bg);
+        overflow: hidden;
+        box-sizing: border-box;
+    }
+
+    /* メインコンテナ（9:16 アスペクト比維持） */
+    .shorts-container {
+        position: relative;
+        aspect-ratio: 9 / 16;
+        height: calc(100vh - 72px);
+        height: calc(100dvh - 72px);
+        max-height: calc(100vh - 72px);
+        max-height: calc(100dvh - 72px);
+        width: auto;
+        max-width: calc((100vh - 72px) * 9 / 16);
+        max-width: calc((100dvh - 72px) * 9 / 16);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin: 8px auto;
+        background-color: #000000;
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        transition: transform 0.35s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.35s ease;
+        box-sizing: border-box;
+        will-change: transform, opacity;
+    }
+
+    /* 上下スワイプ時の移行クラス */
+    .shorts-container.slide-up {
+        transform: translateY(-100%);
+        opacity: 0;
+    }
+    .shorts-container.slide-down {
+        transform: translateY(100%);
+        opacity: 0;
+    }
+
+    /* ビデオエリア */
+    .video-wrapper {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        background: #000000;
+        cursor: pointer;
+        overflow: hidden;
+    }
+
+    video {
+        width: 100%;
+        height: 100%;
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+    }
+
+    /* 一時停止・読み込み表示 */
+    .video-state-overlay {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+        z-index: 20;
+    }
+    #pauseIcon {
+        font-size: 60px;
+        color: rgba(255, 255, 255, 0.85);
+        filter: drop-shadow(0 2px 8px rgba(0,0,0,0.5));
+        display: none;
+    }
+    #loadingSpinner {
+        width: 48px;
+        height: 48px;
+        border: 4px solid rgba(255, 255, 255, 0.3);
+        border-top: 4px solid #ffffff;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        display: none;
+    }
+    @keyframes spin { 
+        0% { transform: rotate(0deg); } 
+        100% { transform: rotate(360deg); } 
+    }
+
+    /* エラーアラートアニメーション */
+    #errorAlert {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) scale(0.9);
+        background: rgba(220, 53, 69, 0.95);
+        color: #ffffff;
+        padding: 20px 28px;
+        border-radius: 16px;
+        text-align: center;
+        z-index: 300;
+        opacity: 0;
+        pointer-events: none;
+        transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    }
+    #errorAlert.show { 
+        opacity: 1; 
+        transform: translate(-50%, -50%) scale(1); 
+    }
+    #errorAlert i { 
+        font-size: 36px; 
+        margin-bottom: 8px; 
+        display: block; 
+    }
+
+    /* 右側アクションボタン */
+    .side-buttons {
+        position: absolute;
+        right: 12px;
+        bottom: 80px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        z-index: 10;
+    }
+
+    .action-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        cursor: pointer;
+        color: #ffffff;
+        text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+    }
+
+    .icon-circle {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background: rgba(0, 0, 0, 0.4);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-size: 20px;
+        margin-bottom: 4px;
+        transition: transform 0.2s ease, background 0.2s ease;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+
+    .icon-circle:hover {
+        background: rgba(255, 255, 255, 0.25);
+        transform: scale(1.08);
+    }
+    .icon-circle:active { 
+        transform: scale(0.92); 
+        background: rgba(255, 255, 255, 0.35); 
+    }
+    .action-item span { 
+        font-size: 11px; 
+        font-weight: 500; 
+        letter-spacing: 0.2px;
+    }
+
+    /* 下部情報エリア */
+    .bottom-info {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        padding: 32px 72px 20px 16px;
+        background: linear-gradient(transparent, rgba(0, 0, 0, 0.85) 70%);
+        z-index: 5;
+        pointer-events: none;
+        box-sizing: border-box;
+    }
+
+    .info-content { 
+        pointer-events: auto; 
+    }
+
+    .author-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 8px;
+    }
+
+    .author-name { 
+        font-weight: 700; 
+        font-size: 14px; 
+        color: #ffffff;
+        text-shadow: 1px 1px 3px rgba(0, 0, 0, 0.8); 
+    }
+
+    .sub-btn {
+        background: #ffffff;
+        color: #0f0f0f;
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 700;
+        border: none;
+        cursor: pointer;
+        transition: opacity 0.2s ease, transform 0.1s ease;
+    }
+    .sub-btn:hover {
+        opacity: 0.9;
+    }
+    .sub-btn:active {
+        transform: scale(0.95);
+    }
+
+    .video-title-trigger {
+        font-size: 14px;
+        line-height: 1.4;
+        color: #ffffff;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        cursor: pointer;
+        text-shadow: 1px 1px 3px rgba(0,0,0,0.8);
+    }
+
+    /* 概要・コメント（ボトムシート） */
+    .description-sheet {
+        position: absolute;
+        bottom: -100%;
+        left: 0;
+        width: 100%;
+        height: 75%;
+        background: var(--yt-bg);
+        color: var(--yt-text-primary);
+        border-top-left-radius: 16px;
+        border-top-right-radius: 16px;
+        z-index: 100;
+        transition: bottom 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        padding: 20px;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        border-top: 1px solid var(--yt-border-color);
+        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
+    }
+
+    .description-sheet.active { 
+        bottom: 0; 
+    }
+
+    .sheet-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding-bottom: 12px;
+        border-bottom: 1px solid var(--yt-border-color);
+        margin-bottom: 12px;
+        flex-shrink: 0;
+    }
+
+    .sheet-handle {
+        width: 36px;
+        height: 4px;
+        background: var(--yt-text-secondary);
+        opacity: 0.4;
+        border-radius: 2px;
+        position: absolute;
+        top: 8px;
+        left: 50%;
+        transform: translateX(-50%);
+    }
+
+    .sheet-tabs {
+        display: flex;
+        gap: 20px;
+    }
+
+    .tab {
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--yt-text-secondary);
+        cursor: pointer;
+        padding-bottom: 6px;
+        border-bottom: 2px solid transparent;
+        transition: color 0.2s, border-color 0.2s;
+    }
+
+    .tab.active { 
+        color: var(--yt-text-primary); 
+        border-bottom: 2px solid var(--yt-text-primary); 
+    }
+
+    .sheet-content {
+        overflow-y: auto;
+        flex-grow: 1;
+        font-size: 14px;
+        line-height: 1.6;
+        color: var(--yt-text-primary);
+    }
+
+    /* コメントカードUI */
+    .comment-item {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 12px;
+        background: var(--yt-hover-bg);
+        padding: 12px;
+        border-radius: 10px;
+        border: 1px solid var(--yt-border-color);
+    }
+
+    .comment-author-icon { 
+        width: 32px; 
+        height: 32px; 
+        border-radius: 50%; 
+        background: var(--yt-border-color); 
+        flex-shrink: 0; 
+        overflow: hidden;
+    }
+    .comment-main { 
+        flex-grow: 1; 
+    }
+    .comment-user { 
+        font-weight: 500; 
+        font-size: 12px; 
+        margin-bottom: 4px; 
+        color: var(--yt-text-secondary); 
+    }
+    .comment-text { 
+        font-size: 13px; 
+        color: var(--yt-text-primary); 
+    }
+
+    /* 3点ドットメニュー */
+    .more-menu {
+        position: absolute;
+        bottom: -100%;
+        left: 0;
+        width: 100%;
+        background: var(--yt-suggest-bg);
+        border-top-left-radius: 16px;
+        border-top-right-radius: 16px;
+        z-index: 200;
+        transition: bottom 0.25s ease-out;
+        padding: 12px 0;
+        border-top: 1px solid var(--yt-border-color);
+        box-shadow: 0 -4px 20px var(--yt-suggest-shadow);
+    }
+    .more-menu.active { 
+        bottom: 0; 
+    }
+    .menu-item {
+        padding: 14px 20px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        cursor: pointer;
+        color: var(--yt-text-primary);
+        font-size: 14px;
+        transition: background 0.2s;
+    }
+    .menu-item:hover { 
+        background: var(--yt-hover-bg); 
+    }
+    .menu-item i { 
+        width: 20px; 
+        font-size: 18px; 
+        text-align: center;
+        color: var(--yt-text-secondary);
+    }
+
+    .close-btn { 
+        font-size: 18px; 
+        cursor: pointer; 
+        color: var(--yt-text-secondary);
+        transition: color 0.2s;
+    }
+    .close-btn:hover {
+        color: var(--yt-text-primary);
+    }
+
+    /* 戻るボタン */
+    .back-btn {
+        position: absolute;
+        top: 16px;
+        left: 16px;
+        z-index: 20;
+        font-size: 18px;
+        color: #ffffff;
+        background: rgba(0, 0, 0, 0.4);
+        width: 38px;
+        height: 38px;
+        border-radius: 50%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        text-decoration: none;
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        transition: background 0.2s, transform 0.1s;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+    .back-btn:hover {
+        background: rgba(0, 0, 0, 0.7);
+    }
+    .back-btn:active {
+        transform: scale(0.92);
+    }
+    
+    /* メニュー用オーバーレイ */
+    #menuOverlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        display: none;
+        z-index: 150;
+        backdrop-filter: blur(2px);
+    }
+
+    /* --- レスポンシブ調整 --- */
+    @media (max-width: 792px) {
+        #yt-main {
+            padding-top: 0 !important;
+            min-height: 100vh;
+            min-height: 100dvh;
+        }
         .shorts-container {
-            position: relative; width: 100%; height: 100dvh;
-            display: flex; justify-content: center; align-items: center;
+            aspect-ratio: 9 / 16;
+            height: 100vh;
+            height: 100dvh;
+            max-height: 100vh;
+            max-height: 100dvh;
+            width: auto;
+            max-width: calc(100dvh * 9 / 16);
+            margin: 0 auto;
+            border-radius: 0;
         }
-
-        /* --- ビデオエリア --- */
-        .video-wrapper {
-            position: relative; width: 100%; height: 100%;
-            display: flex; justify-content: center; align-items: center;
-            background: #000;
-        }
-
-        video {
-            width: 100%; height: 100%; object-fit: contain;
-        }
-
-        /* 一時停止・読み込み表示 */
-        .video-state-overlay {
-            position: absolute;
-            top: 50%; left: 50%; transform: translate(-50%, -50%);
-            pointer-events: none; z-index: 20;
-        }
-        #pauseIcon {
-            font-size: 60px; color: rgba(255,255,255,0.7);
-            display: none;
-        }
-        #loadingSpinner {
-            width: 50px; height: 50px;
-            border: 5px solid rgba(255,255,255,0.2);
-            border-top: 5px solid #fff;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            display: none;
-        }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-
-        /* エラーアラートアニメーション */
-        #errorAlert {
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.9);
-            background: rgba(220, 53, 69, 0.9); color: white; padding: 20px 30px;
-            border-radius: 15px; text-align: center; z-index: 300; opacity: 0; pointer-events: none;
-            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        }
-        #errorAlert.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-        #errorAlert i { font-size: 40px; margin-bottom: 10px; display: block; }
-
-        /* --- 右側アクションボタン --- */
-        .side-buttons {
-            position: absolute; right: 10px; bottom: 100px;
-            display: flex; flex-direction: column; align-items: center; gap: 20px;
-            z-index: 10;
-        }
-
-        .action-item {
-            display: flex; flex-direction: column; align-items: center; cursor: pointer;
-        }
-
-        .icon-circle {
-            width: 45px; height: 45px; border-radius: 50%;
-            background: rgba(40, 40, 40, 0.6);
-            display: flex; justify-content: center; align-items: center;
-            font-size: 22px; margin-bottom: 5px; transition: 0.2s;
-        }
-
-        .icon-circle:active { transform: scale(0.9); background: rgba(80, 80, 80, 0.8); }
-        .action-item span { font-size: 12px; font-weight: bold; }
-
-        /* --- 下部情報エリア --- */
         .bottom-info {
-            position: absolute; bottom: 0; left: 0; width: 100%;
-            padding: 20px 15px 40px;
-            background: linear-gradient(transparent, rgba(0,0,0,0.8));
-            z-index: 5; pointer-events: none;
+            padding-bottom: 24px;
         }
+    }
 
-        .info-content { pointer-events: auto; }
-
-        .author-row {
-            display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
+    @media (max-width: 480px) {
+        #yt-main {
+            padding-top: 0 !important;
         }
-
-        .author-name { font-weight: 700; font-size: 16px; text-shadow: 1px 1px 2px rgba(0,0,0,0.5); }
-
+        .shorts-container {
+            aspect-ratio: 9 / 16;
+            width: 100vw;
+            height: calc(100vw * 16 / 9);
+            max-height: 100vh;
+            max-height: 100dvh;
+            max-width: calc(100dvh * 9 / 16);
+        }
+        .side-buttons {
+            right: 10px;
+            bottom: 65px;
+            gap: 12px;
+        }
+        .icon-circle {
+            width: 42px;
+            height: 42px;
+            font-size: 18px;
+        }
+        .action-item span {
+            font-size: 10px;
+        }
+        .bottom-info {
+            padding: 24px 60px 16px 12px;
+        }
+        .author-name {
+            font-size: 13px;
+        }
         .sub-btn {
-            background: #fff; color: #000; padding: 6px 15px;
-            border-radius: 20px; font-size: 12px; font-weight: bold; border: none;
+            padding: 4px 12px;
+            font-size: 11px;
         }
-
         .video-title-trigger {
-            font-size: 15px; line-height: 1.4; max-width: 80%;
-            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-            overflow: hidden; cursor: pointer; text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+            font-size: 13px;
         }
+    }
+</style>
+{% endblock %}
 
-        /* --- 概要・コメント（ボトムシート） --- */
-        .description-sheet {
-            position: fixed; bottom: -100%; left: 0; width: 100%; height: 70%;
-            background: var(--overlay-bg); border-top-left-radius: 20px; border-top-right-radius: 20px;
-            z-index: 100; transition: bottom 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            backdrop-filter: blur(20px); padding: 20px; box-sizing: border-box;
-            display: flex; flex-direction: column;
-        }
+{% block content %}
+<div id="hidden-cse-container" style="display:none;"></div>
+<div class="shorts-container" id="shortsContainer">
+    <a href="javascript:history.back()" class="back-btn" title="戻る">
+        <i class="fas fa-arrow-left"></i>
+    </a>
 
-        .description-sheet.active { bottom: 0; }
-
-        .sheet-header {
-            display: flex; justify-content: space-between; align-items: center;
-            padding-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1);
-            margin-bottom: 15px;
-            flex-shrink: 0;
-        }
-
-        .sheet-handle {
-            width: 40px; height: 4px; background: rgba(255,255,255,0.3);
-            border-radius: 2px; position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
-        }
-
-        .sheet-tabs {
-            display: flex; gap: 20px; margin-bottom: 15px;
-        }
-
-        .tab {
-            font-size: 14px; font-weight: bold; color: #888; cursor: pointer; padding-bottom: 5px;
-        }
-
-        .tab.active { color: #fff; border-bottom: 2px solid #fff; }
-
-        .sheet-content {
-            overflow-y: auto; flex-grow: 1; font-size: 14px; line-height: 1.6;
-        }
-
-        /* コメントカードUI強化 */
-        .comment-item {
-            display: flex; gap: 12px; margin-bottom: 12px;
-            background: var(--comment-card-bg);
-            padding: 12px; border-radius: 12px;
-            border: 1px solid rgba(255,255,255,0.05);
-        }
-
-        .comment-author-icon { width: 32px; height: 32px; border-radius: 50%; background: #444; flex-shrink: 0; overflow: hidden;}
-        .comment-main { flex-grow: 1; }
-        .comment-user { font-weight: bold; font-size: 12px; margin-bottom: 4px; color: #aaa; }
-        .comment-text { font-size: 13px; color: #eee; }
-
-        /* --- 3点ドットメニュー --- */
-        .more-menu {
-            position: fixed; bottom: -100%; left: 0; width: 100%;
-            background: var(--menu-bg); border-top-left-radius: 15px; border-top-right-radius: 15px;
-            z-index: 200; transition: bottom 0.25s ease-out; padding: 10px 0;
-        }
-        .more-menu.active { bottom: 0; }
-        .menu-item {
-            padding: 15px 20px; display: flex; align-items: center; gap: 15px;
-            cursor: pointer; transition: background 0.2s;
-        }
-        .menu-item:active { background: #444; }
-        .menu-item i { width: 20px; font-size: 18px; }
-
-        .close-btn { font-size: 20px; cursor: pointer; }
-
-        /* --- 戻るボタン --- */
-        .back-btn {
-            position: absolute; top: 20px; left: 15px; z-index: 20;
-            font-size: 20px; color: #fff; text-shadow: 0 0 5px rgba(0,0,0,0.5);
-        }
-        
-        /* メニュー用オーバーレイ */
-        #menuOverlay {
-            position: fixed; top:0; left:0; width:100%; height:100%;
-            background: rgba(0,0,0,0.5); display:none; z-index:150;
-        }
-    </style>
-</head>
-<body>
-
-    <a href="javascript:history.back()" class="back-btn"><i class="fas fa-arrow-left"></i></a>
-
-    <div class="shorts-container">
-        <div class="video-wrapper" onclick="togglePlay()">
-            <video id="shortVideo" loop autoplay playsinline>
-                <source src="{{ videourls[0] if videourls else '' }}" type="video/mp4">
-            </video>
-            <div class="video-state-overlay">
-                <i id="pauseIcon" class="fas fa-pause"></i>
-                <div id="loadingSpinner"></div>
-            </div>
-            <div id="errorAlert">
-                <i class="fas fa-exclamation-triangle"></i>
-                <div>動画の読み込みに失敗しました</div>
-            </div>
+    <div class="video-wrapper" onclick="togglePlay()">
+        <video id="shortVideo" loop autoplay playsinline>
+            <source src="{{ videourls[0] if videourls else '' }}" type="video/mp4">
+        </video>
+        <div class="video-state-overlay">
+            <i id="pauseIcon" class="fas fa-pause"></i>
+            <div id="loadingSpinner"></div>
         </div>
-
-        <div class="side-buttons">
-            <div class="action-item">
-                <div class="icon-circle"><i class="fas fa-thumbs-up"></i></div>
-                <span>{{ like_count or '高く評価' }}</span>
-            </div>
-            <div class="action-item">
-                <div class="icon-circle"><i class="fas fa-thumbs-down"></i></div>
-                <span>低評価</span>
-            </div>
-            <div class="action-item" onclick="openSheet('comments')">
-                <div class="icon-circle"><i class="fas fa-comment-dots"></i></div>
-                <span>コメント</span>
-            </div>
-            <div class="action-item" onclick="shareVideo()">
-                <div class="icon-circle"><i class="fas fa-share"></i></div>
-                <span>共有</span>
-            </div>
-            <div class="action-item" onclick="toggleMoreMenu()">
-                <div class="icon-circle"><i class="fas fa-ellipsis-h"></i></div>
-            </div>
+        <div id="errorAlert">
+            <i class="fas fa-exclamation-triangle"></i>
+            <div>動画の読み込みに失敗しました</div>
         </div>
+    </div>
 
-        <div class="bottom-info">
-            <div class="info-content">
-                <div class="author-row">
-                    <div class="author-name">@{{ author }}</div>
-                    <button class="sub-btn">チャンネル登録</button>
-                </div>
-                <div class="video-title-trigger" onclick="openSheet('description')">
-                    {{ video_title }}
-                </div>
+    <div class="side-buttons">
+        <div class="action-item">
+            <div class="icon-circle"><i class="fas fa-thumbs-up"></i></div>
+            <span>{{ like_count or '高く評価' }}</span>
+        </div>
+        <div class="action-item">
+            <div class="icon-circle"><i class="fas fa-thumbs-down"></i></div>
+            <span>低評価</span>
+        </div>
+        <div class="action-item" onclick="openSheet('comments')">
+            <div class="icon-circle"><i class="fas fa-comment-dots"></i></div>
+            <span>コメント</span>
+        </div>
+        <div class="action-item" onclick="shareVideo()">
+            <div class="icon-circle"><i class="fas fa-share"></i></div>
+            <span>共有</span>
+        </div>
+        <div class="action-item" onclick="toggleMoreMenu()">
+            <div class="icon-circle"><i class="fas fa-ellipsis-h"></i></div>
+        </div>
+    </div>
+
+    <div class="bottom-info">
+        <div class="info-content">
+            <div class="author-row">
+                <div class="author-name">@{{ author }}</div>
+                <button class="sub-btn">チャンネル登録</button>
+            </div>
+            <div class="video-title-trigger" onclick="openSheet('description')">
+                {{ video_title }}
             </div>
         </div>
     </div>
@@ -269,21 +577,31 @@
         <div id="content-comments" class="sheet-content" style="display: none;">
             {% for comment in comments %}
             <div class="comment-item">
-                <div class="comment-author-icon"><img src="{{ comment.authorThumbnails[-1].url if comment.authorThumbnails else '' }}" style="width:100%; border-radius:50%;"></div>
+                <div class="comment-author-icon">
+                    <img src="{{ comment.authorThumbnails[-1].url if comment.authorThumbnails else '' }}" style="width:100%; height:100%; object-fit:cover; border-radius:50%;" onerror="this.src='/proxy/thumb?v=default';">
+                </div>
                 <div class="comment-main">
                     <div class="comment-user">{{ comment.author }} • {{ comment.publishedText }}</div>
                     <div class="comment-text">{{ comment.contentHtml | safe }}</div>
                 </div>
             </div>
             {% else %}
-            <p style="text-align: center; color: #888; margin-top: 50px;">コメントがありません。</p>
+            <p style="text-align: center; color: var(--yt-text-secondary); margin-top: 50px;">コメントがありません。</p>
             {% endfor %}
         </div>
     </div>
 
     <div id="menuOverlay" onclick="toggleMoreMenu()"></div>
     <div id="moreMenu" class="more-menu">
-        <div class="menu-item" onclick="copyVideoId('{{ videoid }}')">
+        <div class="menu-item" onclick="changePlayMethod('cookie')">
+            <i class="fas fa-cookie-bite"></i>
+            <span>再生方法: YouTube Cookie</span>
+        </div>
+        <div class="menu-item" onclick="changePlayMethod('stream')">
+            <i class="fas fa-play-circle"></i>
+            <span>再生方法: ストリーム (Stream)</span>
+        </div>
+        <div class="menu-item" onclick="copyVideoId('{{ videoid }}')" style="border-top: 1px solid var(--yt-border-color);">
             <i class="fas fa-fingerprint"></i>
             <span>動画IDをコピー</span>
         </div>
@@ -295,90 +613,286 @@
             <i class="fab fa-youtube"></i>
             <span>YouTube本家で開く</span>
         </div>
-        <div class="menu-item" onclick="toggleMoreMenu()" style="border-top: 1px solid #444;">
+        <div class="menu-item" onclick="toggleMoreMenu()" style="border-top: 1px solid var(--yt-border-color);">
             <i class="fas fa-times"></i>
             <span>キャンセル</span>
         </div>
     </div>
+</div>
 
-    <script>
-        const video = document.getElementById('shortVideo');
-        const sheet = document.getElementById('descriptionSheet');
-        const menu = document.getElementById('moreMenu');
-        const overlay = document.getElementById('menuOverlay');
-        const pauseIcon = document.getElementById('pauseIcon');
-        const loadingSpinner = document.getElementById('loadingSpinner');
-        const errorAlert = document.getElementById('errorAlert');
+<script async src="https://cse.google.com/cse.js?cx=c04ec9d20c4264b0d"></script>
+{% endblock %}
 
-        function togglePlay() {
-            if (video.paused) { video.play(); } else { video.pause(); }
+{% block extra_js %}
+<script>
+    const video = document.getElementById('shortVideo');
+    const sheet = document.getElementById('descriptionSheet');
+    const menu = document.getElementById('moreMenu');
+    const overlay = document.getElementById('menuOverlay');
+    const pauseIcon = document.getElementById('pauseIcon');
+    const loadingSpinner = document.getElementById('loadingSpinner');
+    const errorAlert = document.getElementById('errorAlert');
+    const shortsContainer = document.getElementById('shortsContainer');
+
+    function togglePlay() {
+        if (video.paused) { 
+            video.play(); 
+        } else { 
+            video.pause(); 
+        }
+    }
+
+    // ビデオイベント監視
+    video.onpause = () => { pauseIcon.style.display = 'block'; };
+    video.onplay = () => { pauseIcon.style.display = 'none'; };
+    video.onwaiting = () => { loadingSpinner.style.display = 'block'; };
+    video.onplaying = () => { loadingSpinner.style.display = 'none'; };
+
+    // シート管理
+    function openSheet(targetTab) {
+        sheet.classList.add('active');
+        switchTab(targetTab);
+    }
+    function closeSheet() { 
+        sheet.classList.remove('active'); 
+    }
+
+    function switchTab(tab) {
+        const descContent = document.getElementById('content-description');
+        const commContent = document.getElementById('content-comments');
+        const descTab = document.getElementById('tab-desc');
+        const commTab = document.getElementById('tab-comm');
+
+        if (tab === 'description') {
+            descContent.style.display = 'block';
+            commContent.style.display = 'none';
+            descTab.classList.add('active');
+            commTab.classList.remove('active');
+        } else {
+            descContent.style.display = 'none';
+            commContent.style.display = 'block';
+            commTab.classList.add('active');
+            descTab.classList.remove('active');
+        }
+    }
+
+    // 共有機能
+    async function shareVideo() {
+        if (navigator.share) {
+            try {
+                await navigator.share({
+                    title: '{{ video_title }}',
+                    url: window.location.href
+                });
+            } catch (err) { 
+                console.log('Share failed', err); 
+            }
+        } else {
+            alert('このブラウザは共有機能に対応していません。URL: ' + window.location.href);
+        }
+    }
+
+    // 3点メニュー
+    function toggleMoreMenu() {
+        menu.classList.toggle('active');
+        overlay.style.display = menu.classList.contains('active') ? 'block' : 'none';
+    }
+
+    function copyVideoId(id) {
+        navigator.clipboard.writeText(id).then(() => {
+            alert('動画IDをコピーしました: ' + id);
+            toggleMoreMenu();
+        });
+    }
+
+    // 再生方法切り替え機能
+    function changePlayMethod(method) {
+        const currentUrl = new URL(window.location.href);
+        currentUrl.searchParams.set('play_method', method);
+        window.location.href = currentUrl.toString();
+    }
+
+    video.onerror = function() { 
+        console.error("Video loading failed.");
+        loadingSpinner.style.display = 'none';
+        errorAlert.classList.add('show');
+        setTimeout(() => { errorAlert.classList.remove('show'); }, 4000);
+    };
+
+    /* --- スワイプ検知・事前取得・重複防止・アニメーション遷移ロジック --- */
+    let touchStartY = 0;
+    let touchEndY = 0;
+    let isFetching = false;
+    let captchaTimer = null;
+    let nextVideoId = null;
+
+    const currentVideoId = "{{ videoid }}";
+    const seenVideoIds = new Set();
+    
+    try {
+        const storedSeen = JSON.parse(sessionStorage.getItem('seenShortsIds') || '[]');
+        storedSeen.forEach(id => seenVideoIds.add(id));
+    } catch(e) {}
+    seenVideoIds.add(currentVideoId);
+
+    function markVideoAsSeen(id) {
+        seenVideoIds.add(id);
+        try {
+            sessionStorage.setItem('seenShortsIds', JSON.stringify(Array.from(seenVideoIds)));
+        } catch(e) {}
+    }
+
+    // デフォルトのフォールバックキーワード
+    const fallbackKeywords = ["スカッと", "ゲーム", "2ch", "おもしろ", "Vlog", "アニメ", "動物"];
+
+    // 1. 最初に見ている動画タイトルに関連するワードを優先取得
+    // 2. 失敗（結果なし等）時は「検索履歴」または「フォールバックキーワード」からランダムで選択
+    function getRandomQuery(isFallback = false) {
+        if (!isFallback) {
+            // 最初に見た動画タイトルを使用
+            const currentTitle = "{{ video_title }}";
+            let cleanTitle = currentTitle.replace(/[#＃]/g, '').trim();
+            if (cleanTitle) return cleanTitle;
         }
 
-        // ビデオイベント監視
-        video.onpause = () => { pauseIcon.style.display = 'block'; };
-        video.onplay = () => { pauseIcon.style.display = 'none'; };
-        video.onwaiting = () => { loadingSpinner.style.display = 'block'; };
-        video.onplaying = () => { loadingSpinner.style.display = 'none'; };
+        // フォールバック時：検索履歴(yt_search_history)とデフォルトワードを合算
+        let candidates = [...fallbackKeywords];
+        try {
+            const history = JSON.parse(localStorage.getItem('yt_search_history') || '[]');
+            if (history.length > 0) {
+                candidates = candidates.concat(history);
+            }
+        } catch(e) {}
 
-        // シート管理
-        function openSheet(targetTab) {
-            sheet.classList.add('active');
-            switchTab(targetTab);
+        // 配列の中からランダムで1つ選択
+        const randomIndex = Math.floor(Math.random() * candidates.length);
+        return candidates[randomIndex];
+    }
+
+    shortsContainer.addEventListener('touchstart', (e) => {
+        touchStartY = e.touches[0].clientY;
+    }, { passive: true });
+
+    shortsContainer.addEventListener('touchend', (e) => {
+        touchEndY = e.changedTouches[0].clientY;
+        handleSwipe();
+    }, { passive: true });
+
+    shortsContainer.addEventListener('wheel', (e) => {
+        if (e.deltaY > 50) {
+            triggerTransitionAndNavigate();
         }
-        function closeSheet() { sheet.classList.remove('active'); }
+    }, { passive: true });
 
-        function switchTab(tab) {
-            const descContent = document.getElementById('content-description');
-            const commContent = document.getElementById('content-comments');
-            const descTab = document.getElementById('tab-desc');
-            const commTab = document.getElementById('tab-comm');
+    function handleSwipe() {
+        if (touchStartY - touchEndY > 50) {
+            triggerTransitionAndNavigate();
+        }
+    }
 
-            if (tab === 'description') {
-                descContent.style.display = 'block';
-                commContent.style.display = 'none';
-                descTab.classList.add('active');
-                commTab.classList.remove('active');
+    function triggerTransitionAndNavigate() {
+        if (isFetching && !nextVideoId) {
+            loadingSpinner.style.display = 'block';
+            return;
+        }
+
+        shortsContainer.classList.add('slide-up');
+
+        setTimeout(() => {
+            if (nextVideoId) {
+                markVideoAsSeen(nextVideoId);
+                window.location.href = '/shorts/' + nextVideoId;
             } else {
-                descContent.style.display = 'none';
-                commContent.style.display = 'block';
-                commTab.classList.add('active');
-                descTab.classList.remove('active');
+                fetchNextShort();
+            }
+        }, 300);
+    }
+
+    function extractShortsId(url) {
+        const match = url.match(/(?:shorts\/|v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+        return match ? match[1] : null;
+    }
+
+    function prefetchNextShort() {
+        if (isFetching) return;
+        isFetching = true;
+
+        const query = getRandomQuery(false);
+        executeSearch(query, false);
+    }
+
+    function fetchNextShort() {
+        prefetchNextShort();
+    }
+
+    function executeSearch(query, isFallback) {
+        clearTimeout(captchaTimer);
+        captchaTimer = setTimeout(() => {
+            if (isFetching) {
+                const cseContainer = document.getElementById('hidden-cse-container');
+                cseContainer.style.display = 'block';
+                cseContainer.style.position = 'fixed';
+                cseContainer.style.top = '100px';
+                cseContainer.style.left = '50%';
+                cseContainer.style.transform = 'translateX(-50%)';
+                cseContainer.style.zIndex = '10000';
+                alert("ロボット確認が必要です。画面に表示される指示に従ってください。完了すると自動で仙人tube plusに戻ります。");
+            }
+        }, 3000);
+
+        const element = google.search.cse.element.getElement('shortsCse');
+        if (element) {
+            element.execute(query + " site:youtube.com/shorts");
+        } else {
+            if (!isFallback) {
+                const randomFallback = getRandomQuery(true);
+                executeSearch(randomFallback, true);
+            } else {
+                isFetching = false;
+                clearTimeout(captchaTimer);
             }
         }
+    }
 
-        // 共有機能
-        async function shareVideo() {
-            if (navigator.share) {
-                try {
-                    await navigator.share({
-                        title: '{{ video_title }}',
-                        url: window.location.href
-                    });
-                } catch (err) { console.log('Share failed', err); }
-            } else {
-                alert('このブラウザは共有機能に対応していません。URL: ' + window.location.href);
-            }
-        }
-
-        // 3点メニュー
-        function toggleMoreMenu() {
-            menu.classList.toggle('active');
-            overlay.style.display = menu.classList.contains('active') ? 'block' : 'none';
-        }
-
-        function copyVideoId(id) {
-            navigator.clipboard.writeText(id).then(() => {
-                alert('動画IDをコピーしました: ' + id);
-                toggleMoreMenu();
+    window.__gcse = {
+        parsetags: 'explicit',
+        initializationCallback: function() {
+            google.search.cse.element.render({
+                div: "hidden-cse-container",
+                tag: 'searchresults-only',
+                gname: 'shortsCse'
             });
-        }
+            prefetchNextShort();
+        },
+        searchCallbacks: {
+            web: {
+                ready: function(name, q, promos, results) {
+                    clearTimeout(captchaTimer);
+                    let foundId = null;
 
-        video.onerror = function() { 
-            console.error("Video loading failed.");
-            loadingSpinner.style.display = 'none';
-            errorAlert.classList.add('show');
-            setTimeout(() => { errorAlert.classList.remove('show'); }, 4000);
-        };
-    </script>
-</body>
-</html>
+                    if (results && results.length > 0) {
+                        for (let r of results) {
+                            const id = extractShortsId(r.unescapedUrl || r.url || "");
+                            if (id && id !== currentVideoId && !seenVideoIds.has(id)) {
+                                foundId = id;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (foundId) {
+                        isFetching = false;
+                        nextVideoId = foundId;
+                        loadingSpinner.style.display = 'none';
+                    } else {
+                        // 見つからないか重複していた場合、ランダムなフォールバックワードで再試行
+                        const randomFallback = getRandomQuery(true);
+                        executeSearch(randomFallback, true);
+                    }
+                    return true;
+                }
+            }
+        }
+    };
+</script>
+{% endblock %}

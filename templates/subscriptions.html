@@ -1,301 +1,697 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>購読マネージャー - 仙人Tube+</title>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <style>
-        :root {
-            --primary-color: #007bff;
-            --primary-hover: #0056b3;
-            --bg-light: #f8f9fa;
-            --text-dark: #1a1a1a;
-            --glass-bg: rgba(255, 255, 255, 0.8);
-            --card-bg: #ffffff;
-            --border-color: rgba(0, 0, 0, 0.08);
-            --accent-bg: #e9ecef;
-        }
+{% extends "base.html" %}
 
-        @media (prefers-color-scheme: dark) {
-            :root {
-                --bg-light: #0f0f0f;
-                --text-dark: #f1f1f1;
-                --glass-bg: rgba(24, 24, 24, 0.85);
-                --card-bg: #1e1e1e;
-                --border-color: rgba(255, 255, 255, 0.1);
-                --accent-bg: #2d2d2d;
-            }
-        }
+{% block title %}すべての登録チャンネル - 仙人Tube{% endblock %}
 
-        body {
-            font-family: 'Noto Sans JP', sans-serif;
-            margin: 0;
-            background-color: var(--bg-light);
-            color: var(--text-dark);
-            padding-top: 70px;
-            overflow-x: hidden;
-        }
+{% block extra_css %}
+<style>
+    /* --- YouTube Official Feed/Channels Page UI --- */
+    .sub-container {
+        max-width: 1280px;
+        margin: 0 auto;
+        padding: 16px 8px;
+    }
 
-        /* --- ナビゲーションバーの強化 --- */
-        #top-bar {
-            position: fixed; top: 0; left: 0; width: 100%;
-            background-color: var(--glass-bg);
-            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-            z-index: 1000; padding: 0 25px; height: 64px;
-            display: flex; align-items: center; justify-content: space-between;
-            border-bottom: 1px solid var(--border-color);
-            box-sizing: border-box;
-        }
+    /* ページヘッダー & 表示切り替えバー */
+    .sub-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 16px 16px 16px;
+        margin-bottom: 8px;
+        border-bottom: 1px solid var(--yt-border-color);
+    }
 
-        .logo-small {
-            display: flex; align-items: center; gap: 8px;
-            text-decoration: none; color: inherit; transition: opacity 0.2s;
-        }
-        .logo-small:hover { opacity: 0.8; }
-        .logo-small h2 { font-size: 1.4rem; margin: 0; font-weight: 700; }
-        .logo-small sup { color: var(--primary-color); font-size: 0.6em; }
+    .sub-header-title {
+        font-size: 20px;
+        font-weight: 700;
+        margin: 0;
+        color: var(--yt-text-primary);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
 
-        /* --- メインレイアウト --- */
-        .page-wrapper {
-            max-width: 1100px;
-            margin: 0 auto;
-            padding: 40px 20px;
-            animation: fadeIn 0.6s ease-out;
-        }
+    .sub-count {
+        font-size: 14px;
+        font-weight: 400;
+        color: var(--yt-text-secondary);
+    }
 
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
+    .view-toggle-group {
+        display: flex;
+        gap: 4px;
+        background-color: var(--yt-hover-bg);
+        padding: 3px;
+        border-radius: 20px;
+    }
 
-        .page-header {
-            margin-bottom: 40px;
-            display: flex;
-            align-items: flex-end;
-            gap: 15px;
-        }
+    .view-btn {
+        background: none;
+        border: none;
+        color: var(--yt-text-secondary);
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: background 0.2s, color 0.2s;
+    }
 
-        .page-header h1 {
-            margin: 0; font-size: 2.2rem; font-weight: 700;
-            background: linear-gradient(45deg, var(--text-dark), var(--primary-color));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
+    .view-btn.active {
+        background-color: var(--yt-chip-active-bg);
+        color: var(--yt-chip-active-text);
+    }
 
-        .stats-badge {
-            background: var(--accent-bg);
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 0.9rem;
-            font-weight: 500;
-            color: var(--primary-color);
-        }
+    .view-btn .material-symbols-outlined {
+        font-size: 20px;
+    }
 
-        /* --- 購読カードグリッド --- */
-        .sub-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-            gap: 20px;
-        }
+    /* --- グリッド表示 (Grid View) --- */
+    .sub-grid-view {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+        gap: 16px;
+        padding: 8px;
+    }
 
-        .sub-card {
-            background: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 24px;
-            padding: 24px;
-            display: flex;
-            align-items: center;
-            gap: 20px;
-            position: relative;
-            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-            box-shadow: 0 4px 6px rgba(0,0,0,0.02);
-        }
+    .sub-card-grid {
+        background-color: transparent;
+        border: 1px solid transparent;
+        border-radius: 16px;
+        padding: 16px 12px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        transition: background-color 0.15s ease, border-color 0.15s ease;
+        position: relative;
+    }
 
-        .sub-card:hover {
-            transform: translateY(-8px) scale(1.02);
-            border-color: var(--primary-color);
-            box-shadow: 0 20px 40px rgba(0, 123, 255, 0.12);
-        }
+    .sub-card-grid:hover {
+        background-color: var(--yt-hover-bg);
+    }
 
-        .channel-avatar {
-            width: 80px;
-            height: 80px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, var(--accent-bg), #ddd);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 2rem;
-            color: var(--primary-color);
-            flex-shrink: 0;
-            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
-        }
+    .grid-avatar-wrapper {
+        position: relative;
+        margin-bottom: 12px;
+        text-decoration: none;
+    }
 
-        .card-content {
-            flex: 1;
-            min-width: 0;
-        }
+    .grid-avatar {
+        width: 104px;
+        height: 104px;
+        border-radius: 50%;
+        background-color: var(--yt-chip-bg);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--yt-text-secondary);
+        overflow: hidden;
+    }
 
-        .channel-name {
-            font-size: 1.15rem;
-            font-weight: 700;
-            margin-bottom: 4px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
+    .grid-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
 
-        .channel-id {
-            font-size: 0.8rem;
-            color: #888;
-            font-family: monospace;
-            margin-bottom: 12px;
-        }
+    .channel-title-link {
+        font-size: 15px;
+        font-weight: 500;
+        color: var(--yt-text-primary);
+        text-decoration: none;
+        width: 100%;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-bottom: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+    }
 
-        /* --- ボタンデザイン --- */
-        .btn-group {
-            display: flex;
-            gap: 10px;
-        }
+    .channel-title-link:hover {
+        color: var(--yt-text-primary);
+    }
 
-        .action-btn {
-            flex: 1;
-            padding: 8px 0;
-            border-radius: 12px;
-            font-size: 0.85rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-            text-align: center;
-            text-decoration: none;
-        }
+    .verified-badge {
+        font-size: 14px;
+        color: var(--yt-text-secondary);
+    }
 
-        .btn-visit {
-            background-color: var(--primary-color);
-            color: white;
-            border: none;
-        }
-        .btn-visit:hover { background-color: var(--primary-hover); }
+    .channel-meta {
+        font-size: 12px;
+        color: var(--yt-text-secondary);
+        margin-bottom: 16px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        width: 100%;
+    }
 
-        .btn-unsub {
-            background-color: transparent;
-            color: #888;
-            border: 1px solid var(--border-color);
-        }
-        .btn-unsub:hover {
-            background-color: #ff4d4f15;
-            color: #ff4d4f;
-            border-color: #ff4d4f30;
-        }
+    /* ボタンエリア（ベル通知 & 登録済みボタン） */
+    .action-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: auto;
+    }
 
-        /* --- 空の状態 --- */
-        .empty-state {
-            text-align: center;
-            padding: 100px 20px;
-            background: var(--card-bg);
-            border-radius: 30px;
-            border: 2px dashed var(--border-color);
-        }
+    .sub-btn-joined {
+        background-color: var(--yt-chip-bg);
+        color: var(--yt-text-primary);
+        border: none;
+        border-radius: 18px;
+        height: 36px;
+        padding: 0 16px;
+        font-size: 14px;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
 
-        .empty-state i {
-            font-size: 4rem;
-            color: var(--accent-bg);
-            margin-bottom: 20px;
-        }
+    .sub-btn-joined:hover {
+        background-color: var(--yt-active-bg);
+    }
 
-        .empty-state h3 { font-size: 1.5rem; margin-bottom: 10px; }
-        .empty-state p { color: #888; margin-bottom: 25px; }
+    .bell-btn {
+        background-color: var(--yt-chip-bg);
+        color: var(--yt-text-primary);
+        border: none;
+        border-radius: 50%;
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
 
-        .search-btn {
-            display: inline-block;
-            background: var(--primary-color);
-            color: white;
-            padding: 12px 32px;
-            border-radius: 50px;
-            text-decoration: none;
-            font-weight: 700;
-            transition: transform 0.2s;
-        }
-        .search-btn:hover { transform: scale(1.05); }
+    .bell-btn:hover {
+        background-color: var(--yt-active-bg);
+    }
 
-    </style>
-</head>
-<body>
-    <header id="top-bar">
-        <a href="/" class="logo-small">
-            <h2>仙人Tube<sup>+</sup></h2>
+    .bell-btn .material-symbols-outlined {
+        font-size: 20px;
+    }
+
+    /* --- リスト表示 (List View) --- */
+    .sub-list-view {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+        padding: 0 8px;
+    }
+
+    .sub-card-list {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px 24px;
+        border-bottom: 1px solid var(--yt-border-color);
+        border-radius: 12px;
+        transition: background-color 0.15s ease;
+    }
+
+    .sub-card-list:hover {
+        background-color: var(--yt-hover-bg);
+    }
+
+    .list-left {
+        display: flex;
+        align-items: center;
+        gap: 24px;
+        flex: 1;
+        min-width: 0;
+    }
+
+    .list-avatar {
+        width: 80px;
+        height: 80px;
+        border-radius: 50%;
+        background-color: var(--yt-chip-bg);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--yt-text-secondary);
+        flex-shrink: 0;
+        overflow: hidden;
+    }
+
+    .list-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .list-info {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 0;
+    }
+
+    .list-info .channel-title-link {
+        justify-content: flex-start;
+        font-size: 16px;
+    }
+
+    .list-description {
+        font-size: 13px;
+        color: var(--yt-text-secondary);
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        line-height: 1.4;
+    }
+
+    /* --- Empty State (登録チャンネルなし) --- */
+    .empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 100px 20px;
+        text-align: center;
+    }
+
+    .empty-icon-circle {
+        width: 120px;
+        height: 120px;
+        border-radius: 50%;
+        background-color: var(--yt-hover-bg);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 24px;
+    }
+
+    .empty-icon-circle .material-symbols-outlined {
+        font-size: 60px;
+        color: var(--yt-text-secondary);
+    }
+
+    .empty-state h3 {
+        font-size: 20px;
+        font-weight: 500;
+        margin: 0 0 8px 0;
+    }
+
+    .empty-state p {
+        font-size: 14px;
+        color: var(--yt-text-secondary);
+        margin: 0 0 24px 0;
+        max-width: 400px;
+        line-height: 1.5;
+    }
+
+    .btn-explore {
+        background-color: var(--yt-chip-active-bg);
+        color: var(--yt-chip-active-text);
+        padding: 10px 20px;
+        border-radius: 20px;
+        text-decoration: none;
+        font-size: 14px;
+        font-weight: 500;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        transition: opacity 0.2s;
+    }
+
+    .btn-explore:hover {
+        opacity: 0.9;
+    }
+
+    /* --- YouTube風 登録解除モーダル --- */
+    .unsub-modal-overlay {
+        position: fixed;
+        top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0, 0, 0, 0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 3000;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s ease;
+    }
+
+    .unsub-modal-overlay.open {
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    .unsub-modal {
+        background-color: var(--yt-suggest-bg);
+        border-radius: 24px;
+        padding: 24px;
+        width: 100%;
+        max-width: 380px;
+        box-shadow: 0 12px 32px rgba(0,0,0,0.4);
+        border: 1px solid var(--yt-border-color);
+    }
+
+    .unsub-modal h4 {
+        margin: 0 0 12px 0;
+        font-size: 16px;
+        font-weight: 500;
+        color: var(--yt-text-primary);
+    }
+
+    .unsub-modal p {
+        margin: 0 0 24px 0;
+        font-size: 14px;
+        color: var(--yt-text-secondary);
+        line-height: 1.4;
+    }
+
+    .unsub-modal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+    }
+
+    .btn-dialog {
+        background: none;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 18px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+    }
+
+    .btn-dialog-cancel {
+        color: var(--yt-text-primary);
+    }
+    .btn-dialog-cancel:hover { background-color: var(--yt-hover-bg); }
+
+    .btn-dialog-confirm {
+        color: #3ea6ff;
+    }
+    .btn-dialog-confirm:hover { background-color: rgba(62, 166, 255, 0.1); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="sub-container">
+    <div class="sub-header">
+        <h1 class="sub-header-title">
+            すべての登録チャンネル
+            <span class="sub-count" id="sub-count-text"></span>
+        </h1>
+        <div class="view-toggle-group">
+            <button class="view-btn active" id="btn-view-grid" title="グリッド表示">
+                <span class="material-symbols-outlined">grid_view</span>
+            </button>
+            <button class="view-btn" id="btn-view-list" title="リスト表示">
+                <span class="material-symbols-outlined">format_list_bulleted</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- チャンネル一覧コンテナ -->
+    <div id="sub-feed" class="sub-grid-view"></div>
+
+    <!-- 空の状態 -->
+    <div id="empty-state" class="empty-state" style="display: none;">
+        <div class="empty-icon-circle">
+            <span class="material-symbols-outlined">subscriptions</span>
+        </div>
+        <h3>お気に入りのチャンネルを追加しましょう</h3>
+        <p>チャンネルを登録すると、最新動画やコミュニティ投稿をすばやく見つけることができます。</p>
+        <a href="/" class="btn-explore">
+            <span class="material-symbols-outlined">search</span>
+            動画を検索する
         </a>
-        <div class="stats-badge" id="sub-count-badge">0 購読</div>
-    </header>
+    </div>
+</div>
 
-    <main class="page-wrapper">
-        <div class="page-header">
-            <h1>Subscriptions</h1>
+<!-- 登録解除ダイアログ -->
+<div class="unsub-modal-overlay" id="unsub-modal">
+    <div class="unsub-modal">
+        <h4 id="unsub-modal-title">登録を解除しますか？</h4>
+        <p>このチャンネルの登録を解除してもよろしいですか？</p>
+        <div class="unsub-modal-actions">
+            <button class="btn-dialog btn-dialog-cancel" id="btn-modal-cancel">キャンセル</button>
+            <button class="btn-dialog btn-dialog-confirm" id="btn-modal-confirm">登録解除</button>
         </div>
+    </div>
+</div>
+{% endblock %}
 
-        <div id="sub-grid" class="sub-grid">
-            </div>
+{% block extra_js %}
+<script>
+    let currentViewMode = 'grid'; // 'grid' または 'list'
+    let pendingUnsubUcid = null;
 
-        <div id="empty-state" class="empty-state" style="display: none;">
-            <i class="fas fa-layer-group"></i>
-            <h3>まだ何もありません</h3>
-            <p>お気に入りのチャンネルを登録して、自分だけのフィードを作りましょう。</p>
-            <a href="/" class="search-btn">動画を検索する</a>
-        </div>
-    </main>
+    function escapeHtml(str) {
+        return String(str || '').replace(/[&<>"']/g, function(m) {
+            return {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }[m];
+        });
+    }
 
-    <script>
-        function loadSubscriptions() {
-            const grid = document.getElementById('sub-grid');
-            const emptyState = document.getElementById('empty-state');
-            const badge = document.getElementById('sub-count-badge');
-            const subs = JSON.parse(localStorage.getItem('subscribed_channels') || '[]');
+    function getSubscribedChannels() {
+        try {
+            return JSON.parse(localStorage.getItem('subscribed_channels') || '[]');
+        } catch (e) {
+            return [];
+        }
+    }
 
-            badge.innerText = `${subs.length} 購読`;
+    function normalizeChannelData(item) {
+        if (typeof item === 'object' && item !== null) {
+            return {
+                ucid: String(item.ucid || item.id || ''),
+                name: item.name || item.title || item.ucid || item.id || '',
+                icon: item.icon || item.avatar || '',
+                handle: item.handle || item.customUrl || '',
+                description: item.description || ''
+            };
+        }
+        const str = String(item || '');
+        return {
+            ucid: str,
+            name: str,
+            icon: '',
+            handle: str ? `@${str}` : '',
+            description: ''
+        };
+    }
 
-            if (subs.length === 0) {
-                grid.innerHTML = '';
-                emptyState.style.display = 'block';
-                return;
+    async function fetchAndFillMissingChannelInfo() {
+        let rawSubs = getSubscribedChannels();
+        let updated = false;
+
+        for (let i = 0; i < rawSubs.length; i++) {
+            let item = normalizeChannelData(rawSubs[i]);
+            if (item.ucid && (!item.icon || item.name === item.ucid)) {
+                try {
+                    const resp = await fetch(`/api/channel_info?ucid=${encodeURIComponent(item.ucid)}`);
+                    if (resp.ok) {
+                        const data = await resp.json();
+                        if (data && data.name) {
+                            rawSubs[i] = {
+                                ucid: item.ucid,
+                                name: data.name || item.name,
+                                icon: data.icon || item.icon,
+                                handle: data.handle || item.handle,
+                                description: data.description || item.description
+                            };
+                            updated = true;
+                        }
+                    }
+                } catch (e) {
+                    console.error("Failed to fetch channel info for", item.ucid, e);
+                }
             }
+        }
 
-            emptyState.style.display = 'none';
-            grid.innerHTML = '';
+        if (updated) {
+            localStorage.setItem('subscribed_channels', JSON.stringify(rawSubs));
+            renderSubscriptions();
+        }
+    }
 
-            subs.forEach((ucid, index) => {
-                const card = document.createElement('div');
-                card.className = 'sub-card';
-                card.style.animationDelay = `${index * 0.05}s`;
-                
-                card.innerHTML = `
-                    <div class="channel-avatar">
-                        <i class="fas fa-user-ninja"></i>
-                    </div>
-                    <div class="card-content">
-                        <div class="channel-name">Channel ID: ${ucid.substring(0, 10)}...</div>
-                        <div class="channel-id">${ucid}</div>
-                        <div class="btn-group">
-                            <a href="/channel/${ucid}" class="action-btn btn-visit">移動</a>
-                            <div class="action-btn btn-unsub" onclick="unsubscribe('${ucid}')">解除</div>
+    function renderSubscriptions() {
+        const rawSubs = getSubscribedChannels();
+        const feed = $('#sub-feed');
+        const emptyState = $('#empty-state');
+        const countText = $('#sub-count-text');
+
+        countText.text(`(${rawSubs.length})`);
+
+        if (rawSubs.length === 0) {
+            feed.hide();
+            emptyState.show();
+            return;
+        }
+
+        emptyState.hide();
+        feed.show();
+        feed.empty();
+
+        if (currentViewMode === 'grid') {
+            feed.attr('class', 'sub-grid-view');
+            rawSubs.forEach(rawItem => {
+                const item = normalizeChannelData(rawItem);
+                const safeUcid = escapeHtml(item.ucid);
+                const safeName = escapeHtml(item.name);
+                const safeHandle = escapeHtml(item.handle);
+                const safeIcon = escapeHtml(item.icon);
+
+                const avatarContent = safeIcon
+                    ? `<img src="${safeIcon}" alt="${safeName}">`
+                    : `<span class="material-symbols-outlined" style="font-size:56px;">account_circle</span>`;
+
+                const metaText = safeHandle ? safeHandle : safeUcid;
+
+                const cardHtml = `
+                    <div class="sub-card-grid">
+                        <a href="/channel/${safeUcid}" class="grid-avatar-wrapper">
+                            <div class="grid-avatar">
+                                ${avatarContent}
+                            </div>
+                        </a>
+                        <a href="/channel/${safeUcid}" class="channel-title-link" title="${safeName}">
+                            <span>${safeName}</span>
+                            <span class="material-symbols-outlined verified-badge">check_circle</span>
+                        </a>
+                        <div class="channel-meta">${metaText}</div>
+                        <div class="action-row">
+                            <button class="bell-btn" title="通知">
+                                <span class="material-symbols-outlined">notifications_active</span>
+                            </button>
+                            <button class="sub-btn-joined" onclick="promptUnsubscribe('${safeUcid}', '${safeName}')">
+                                <span class="material-symbols-outlined" style="font-size:18px;">check</span>
+                                登録済み
+                            </button>
                         </div>
                     </div>
                 `;
-                grid.appendChild(card);
+                feed.append(cardHtml);
+            });
+        } else {
+            feed.attr('class', 'sub-list-view');
+            rawSubs.forEach(rawItem => {
+                const item = normalizeChannelData(rawItem);
+                const safeUcid = escapeHtml(item.ucid);
+                const safeName = escapeHtml(item.name);
+                const safeHandle = escapeHtml(item.handle);
+                const safeIcon = escapeHtml(item.icon);
+                const safeDesc = escapeHtml(item.description);
+
+                const avatarContent = safeIcon
+                    ? `<img src="${safeIcon}" alt="${safeName}">`
+                    : `<span class="material-symbols-outlined" style="font-size:48px;">account_circle</span>`;
+
+                const descText = safeDesc ? safeDesc : (safeHandle ? safeHandle : safeUcid);
+
+                const listHtml = `
+                    <div class="sub-card-list">
+                        <div class="list-left">
+                            <a href="/channel/${safeUcid}" class="list-avatar">
+                                ${avatarContent}
+                            </a>
+                            <div class="list-info">
+                                <a href="/channel/${safeUcid}" class="channel-title-link" title="${safeName}">
+                                    <span>${safeName}</span>
+                                    <span class="material-symbols-outlined verified-badge">check_circle</span>
+                                </a>
+                                <div class="list-description">${descText}</div>
+                            </div>
+                        </div>
+                        <div class="action-row">
+                            <button class="bell-btn" title="通知">
+                                <span class="material-symbols-outlined">notifications_active</span>
+                            </button>
+                            <button class="sub-btn-joined" onclick="promptUnsubscribe('${safeUcid}', '${safeName}')">
+                                <span class="material-symbols-outlined" style="font-size:18px;">check</span>
+                                登録済み
+                            </button>
+                        </div>
+                    </div>
+                `;
+                feed.append(listHtml);
             });
         }
+    }
 
-        function unsubscribe(ucid) {
-            let subs = JSON.parse(localStorage.getItem('subscribed_channels') || '[]');
-            subs = subs.filter(id => id !== ucid);
-            localStorage.setItem('subscribed_channels', JSON.stringify(subs));
-            
-            // UIからカードを消す際のアニメーション
-            loadSubscriptions();
-        }
+    // 登録解除モーダルの制御
+    function promptUnsubscribe(ucid, displayName) {
+        pendingUnsubUcid = ucid;
+        const nameToDisplay = displayName || ucid;
+        $('#unsub-modal-title').text(`「${nameToDisplay}」の登録を解除しますか？`);
+        $('#unsub-modal').addClass('open');
+    }
 
-        window.addEventListener('DOMContentLoaded', loadSubscriptions);
-    </script>
-</body>
-</html>
+    function confirmUnsubscribe() {
+        if (!pendingUnsubUcid) return;
+        let subs = getSubscribedChannels();
+        subs = subs.filter(item => {
+            if (typeof item === 'object' && item !== null) {
+                return (item.ucid || item.id) !== pendingUnsubUcid;
+            }
+            return item !== pendingUnsubUcid;
+        });
+        localStorage.setItem('subscribed_channels', JSON.stringify(subs));
+        
+        pendingUnsubUcid = null;
+        $('#unsub-modal').removeClass('open');
+        renderSubscriptions();
+    }
+
+    $(document).ready(function() {
+        // サイドバーアクティブ表示
+        $('#yt-sidebar .nav-item').removeClass('active');
+        $('#yt-sidebar a[href="/subscriptions"]').addClass('active');
+
+        // ビュー切り替えイベント
+        $('#btn-view-grid').click(function() {
+            $('.view-btn').removeClass('active');
+            $(this).addClass('active');
+            currentViewMode = 'grid';
+            renderSubscriptions();
+        });
+
+        $('#btn-view-list').click(function() {
+            $('.view-btn').removeClass('active');
+            $(this).addClass('active');
+            currentViewMode = 'list';
+            renderSubscriptions();
+        });
+
+        // モーダルキャンセル
+        $('#btn-modal-cancel, #unsub-modal').click(function(e) {
+            if (e.target === this) {
+                $('#unsub-modal').removeClass('open');
+                pendingUnsubUcid = null;
+            }
+        });
+
+        // モーダル実行
+        $('#btn-modal-confirm').click(function() {
+            confirmUnsubscribe();
+        });
+
+        renderSubscriptions();
+        fetchAndFillMissingChannelInfo();
+    });
+</script>
+{% endblock %}

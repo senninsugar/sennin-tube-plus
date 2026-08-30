@@ -1,0 +1,417 @@
+{% extends 'base.html' %}
+
+{% block title %}ヘルプ - 仙人Tube{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* --- 白・黒・青のメインテーマ設定 --- */
+    :root {
+        --help-blue-primary: #065fd4;
+        --help-blue-hover: #0056b3;
+        --help-blue-light: #e8f0fe;
+        --help-blue-accent: #3ea6ff;
+        --help-card-bg: #181818;
+        --help-card-border: #272727;
+    }
+
+    @media (prefers-color-scheme: light) {
+        :root {
+            --help-card-bg: #f9f9f9;
+            --help-card-border: #e5e5e5;
+        }
+    }
+
+    .help-container {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 24px 16px 60px;
+    }
+
+    /* ヒーローセクション */
+    .help-hero {
+        background: linear-gradient(135deg, #065fd4 0%, #002e66 100%);
+        color: #ffffff;
+        border-radius: 16px;
+        padding: 40px 24px;
+        text-align: center;
+        margin-bottom: 32px;
+        box-shadow: 0 4px 20px rgba(6, 95, 212, 0.25);
+    }
+
+    .help-hero h1 {
+        margin: 0 0 12px 0;
+        font-size: 28px;
+        font-weight: 700;
+    }
+
+    .help-hero p {
+        margin: 0;
+        font-size: 15px;
+        opacity: 0.9;
+    }
+
+    /* セクションタイトル */
+    .section-title {
+        font-size: 20px;
+        font-weight: 700;
+        margin: 32px 0 20px 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        border-left: 4px solid var(--help-blue-primary);
+        padding-left: 12px;
+    }
+
+    /* API設定ボックス（追加機能） */
+    .api-setting-card {
+        background-color: var(--help-card-bg);
+        border: 1px solid var(--help-card-border);
+        border-radius: 12px;
+        padding: 24px;
+        margin-bottom: 32px;
+    }
+
+    .api-setting-card h3 {
+        margin: 0 0 8px 0;
+        font-size: 18px;
+        color: var(--yt-text-primary);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .api-setting-card p {
+        margin: 0 0 16px 0;
+        font-size: 14px;
+        color: var(--yt-text-secondary);
+        line-height: 1.5;
+    }
+
+    .api-select-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+    }
+
+    .api-select {
+        flex: 1;
+        min-width: 240px;
+        padding: 10px 14px;
+        border-radius: 8px;
+        background-color: var(--yt-bg);
+        color: var(--yt-text-primary);
+        border: 1px solid var(--help-card-border);
+        font-size: 14px;
+        outline: none;
+    }
+
+    .api-select:focus {
+        border-color: var(--help-blue-accent);
+    }
+
+    /* クイックリンク（カード） */
+    .help-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 16px;
+        margin-bottom: 40px;
+    }
+
+    .help-card {
+        background-color: var(--help-card-bg);
+        border: 1px solid var(--help-card-border);
+        border-radius: 12px;
+        padding: 20px;
+        display: flex;
+        align-items: flex-start;
+        gap: 16px;
+        text-decoration: none;
+        color: var(--yt-text-primary);
+        transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .help-card:hover {
+        transform: translateY(-2px);
+        border-color: var(--help-blue-accent);
+        box-shadow: 0 4px 12px rgba(6, 95, 212, 0.15);
+    }
+
+    .help-card-icon {
+        background-color: var(--help-blue-primary);
+        color: #ffffff;
+        width: 44px;
+        height: 44px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .help-card-info h3 {
+        margin: 0 0 6px 0;
+        font-size: 16px;
+        font-weight: 500;
+    }
+
+    .help-card-info p {
+        margin: 0;
+        font-size: 13px;
+        color: var(--yt-text-secondary);
+        line-height: 1.4;
+    }
+
+    /* FAQ（アコーディオン） */
+    .faq-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-bottom: 40px;
+    }
+
+    .faq-item {
+        background-color: var(--help-card-bg);
+        border: 1px solid var(--help-card-border);
+        border-radius: 10px;
+        overflow: hidden;
+    }
+
+    .faq-question {
+        width: 100%;
+        padding: 16px 20px;
+        background: none;
+        border: none;
+        color: var(--yt-text-primary);
+        text-align: left;
+        font-size: 15px;
+        font-weight: 500;
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        transition: background-color 0.2s;
+    }
+
+    .faq-question:hover {
+        background-color: var(--yt-hover-bg);
+    }
+
+    .faq-question .arrow-icon {
+        color: var(--help-blue-accent);
+        transition: transform 0.3s ease;
+    }
+
+    .faq-item.open .arrow-icon {
+        transform: rotate(180deg);
+    }
+
+    .faq-answer {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.3s ease-out, padding 0.3s ease;
+        background-color: transparent;
+        padding: 0 20px;
+        color: var(--yt-text-secondary);
+        font-size: 14px;
+        line-height: 1.6;
+    }
+
+    .faq-item.open .faq-answer {
+        padding: 0 20px 16px 20px;
+        max-height: 300px;
+    }
+
+    /* ボタン */
+    .btn-blue {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background-color: var(--help-blue-primary);
+        color: #ffffff;
+        padding: 10px 24px;
+        border-radius: 20px;
+        border: none;
+        cursor: pointer;
+        text-decoration: none;
+        font-weight: 500;
+        font-size: 14px;
+        transition: background-color 0.2s, box-shadow 0.2s;
+    }
+
+    .btn-blue:hover {
+        background-color: var(--help-blue-hover);
+        box-shadow: 0 2px 8px rgba(6, 95, 212, 0.3);
+    }
+
+    /* お問い合わせフッター */
+    .contact-box {
+        background-color: var(--help-card-bg);
+        border: 1px solid var(--help-card-border);
+        border-radius: 12px;
+        padding: 24px;
+        text-align: center;
+    }
+
+    .contact-box p {
+        margin: 0 0 16px 0;
+        color: var(--yt-text-secondary);
+        font-size: 14px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="help-container">
+    <div class="help-hero">
+        <h1>どのようなお困りごとですか？</h1>
+        <p>仙人Tubeの使い方や良くあるトラブルの解決方法をご案内します。</p>
+    </div>
+
+    <h2 class="section-title">API（接続サーバー）設定</h2>
+    <div class="api-setting-card">
+        <h3>
+            <span class="material-symbols-outlined" style="color: var(--help-blue-accent);">dns</span>
+            Invidious API インスタンスの変更
+        </h3>
+        <p>動画が再生されない・音が出ない・読み込みが遅い場合は、利用するInvidiousサーバー（API）を切り替えることで改善することがあります。</p>
+        
+        <div class="api-select-group">
+            <select id="api-instance-select" class="api-select">
+                <option value="https://invidious.nerdvpn.de">Invidious (nerdvpn.de) - 推奨</option>
+                <option value="https://inv.projectsegfau.lt">Invidious (projectsegfau.lt)</option>
+                <option value="https://invidious.drgns.space">Invidious (drgns.space)</option>
+                <option value="https://vid.puffyan.us">Invidious (puffyan.us)</option>
+                <option value="custom">カスタムURLを入力...</option>
+            </select>
+            
+            <button id="save-api-btn" class="btn-blue">
+                <span class="material-symbols-outlined">save</span>
+                設定を保存
+            </button>
+        </div>
+    </div>
+
+    <div class="help-grid">
+        <a href="#" class="help-card">
+            <div class="help-card-icon">
+                <span class="material-symbols-outlined">play_circle</span>
+            </div>
+            <div class="help-card-info">
+                <h3>動画再生・音声の不具合</h3>
+                <p>動画が重い、音が出ない場合の対処法</p>
+            </div>
+        </a>
+
+        <a href="#" class="help-card">
+            <div class="help-card-icon">
+                <span class="material-symbols-outlined">account_circle</span>
+            </div>
+            <div class="help-card-info">
+                <h3>アカウント設定</h3>
+                <p>登録情報の変更やログインについて</p>
+            </div>
+        </a>
+
+        <a href="#" class="help-card">
+            <div class="help-card-icon">
+                <span class="material-symbols-outlined">security</span>
+            </div>
+            <div class="help-card-info">
+                <h3>プライバシーと安全</h3>
+                <p>セキュリティ設定や閲覧履歴の管理</p>
+            </div>
+        </a>
+    </div>
+
+    <h2 class="section-title">よくある質問</h2>
+    
+    <div class="faq-list">
+        <div class="faq-item">
+            <button class="faq-question">
+                <span>動画の音（音声）が出ない・無音になる</span>
+                <span class="material-symbols-outlined arrow-icon">expand_more</span>
+            </button>
+            <div class="faq-answer">
+                以下の手順をお試しください：<br>
+                1. プレーヤー上の音量アイコンが「ミュート（消音）」になっていないか確認してください。<br>
+                2. ブラウザの自動再生規制により音声がブロックされている場合があります。一度動画画面をタップ・クリックしてください。<br>
+                3. 特定のAPIサーバーで音声ストリームが取得できていない可能性があります。上の「<strong>Invidious API インスタンスの変更</strong>」から別のサーバーに切り替えてお試しください。
+            </div>
+        </div>
+
+        <div class="faq-item">
+            <button class="faq-question">
+                <span>動画が正常に読み込まれない・途切れる</span>
+                <span class="material-symbols-outlined arrow-icon">expand_more</span>
+            </button>
+            <div class="faq-answer">
+                ネットワーク接続を確認するか、ブラウザのキャッシュをクリアしてください。また、APIインスタンスを変更することでも速度が大幅に改善される場合があります。
+            </div>
+        </div>
+
+        <div class="faq-item">
+            <button class="faq-question">
+                <span>検索履歴を消去したい</span>
+                <span class="material-symbols-outlined arrow-icon">expand_more</span>
+            </button>
+            <div class="faq-answer">
+                検索履歴はお使いのブラウザ（ローカルストレージ）に保存されています。サイドバーの「履歴」またはブラウザの閲覧データを削除することで消去できます。
+            </div>
+        </div>
+
+        <div class="faq-item">
+            <button class="faq-question">
+                <span>ダークモード / ライトモードの切り替え方法</span>
+                <span class="material-symbols-outlined arrow-icon">expand_more</span>
+            </button>
+            <div class="faq-answer">
+                仙人Tubeは端末（OS・ブラウザ）のテーマ設定に自動で連動します。お使いの端末設定からダークモード / ライトモードを切り替えてください。
+            </div>
+        </div>
+    </div>
+
+    <div class="contact-box">
+        <h3>解決しない場合</h3>
+        <p>問題が解決しない場合は、サポートチームまでお気軽にお問い合わせください。</p>
+        <a href="/contact" class="btn-blue">
+            <span class="material-symbols-outlined">mail</span>
+            お問い合わせフォームへ
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    $(document).ready(function() {
+        // FAQ のアコーディオン開閉動作
+        $('.faq-question').click(function() {
+            const $item = $(this).parent('.faq-item');
+            $item.toggleClass('open');
+        });
+
+        // --- API インスタンス設定の保存機能（localStorage） ---
+        const API_KEY = 'selected_invidious_api';
+
+        // 記憶されている設定があれば読み込む
+        const savedApi = localStorage.getItem(API_KEY);
+        if (savedApi) {
+            $('#api-instance-select').val(savedApi);
+        }
+
+        // 保存ボタン押下時
+        $('#save-api-btn').click(function() {
+            let selectedVal = $('#api-instance-select').val();
+
+            if (selectedVal === 'custom') {
+                selectedVal = prompt('使用したい Invidious API の URL を入力してください:', 'https://');
+                if (!selectedVal) return;
+            }
+
+            localStorage.setItem(API_KEY, selectedVal);
+            alert('APIサーバーの設定を保存しました！\n動画再生時に反映されます。');
+        });
+    });
+</script>
+{% endblock %}

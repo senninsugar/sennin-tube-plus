@@ -1,271 +1,173 @@
-from fastapi import FastAPI, Request, Query
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
-from fastapi.templating import Jinja2Templates
-from fastapi.staticfiles import StaticFiles
-import httpx
+import requests
 import asyncio
+from fastapi import FastAPI, Query, Request
+from fastapi.responses import HTMLResponse, RedirectResponse, Response, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from starlette.exceptions import HTTPException as StarletteHTTPException
 import json
-import random
 from datetime import datetime
+import random
+
+from app.search import router as search_router
+from app.video import router as video_router
+from app.stream import router as stream_router
+from app.channel import router as channel_router
+from app.short import router as short_router
+
+SOURCES = {
+    "Education - Toka_Kun_-1": "https://raw.githubusercontent.com/toka-kun/Education/refs/heads/main/keys/key1.json",
+    "Education - Toka_Kun_-2": "https://raw.githubusercontent.com/toka-kun/Education/refs/heads/main/keys/key2.json",
+    "Education - Toka_Kun_-3": "https://raw.githubusercontent.com/toka-kun/Education/refs/heads/main/keys/key3.json",
+    "Education - Toka_Kun_-4": "https://raw.githubusercontent.com/toka-kun/Education/refs/heads/main/keys/key4.json",
+    "Education - siawaseok": "https://raw.githubusercontent.com/siawaseok3/wakame/master/video_config.json",
+    "Education - wakame": "https://raw.githubusercontent.com/wakame02/wktopu/refs/heads/main/edu.text",
+    "Education - woolisbest4520-1": "https://raw.githubusercontent.com/wista-api-project/auto/refs/heads/main/edu/1.txt",
+    "Education - woolisbest4520-2": "https://raw.githubusercontent.com/wista-api-project/auto/refs/heads/main/edu/2.txt",
+    "Education - woolisbest4520-3": "https://raw.githubusercontent.com/wista-api-project/auto/refs/heads/main/edu/3.txt",
+}
+
+def get_education_embed_url(video_id: str, source_name: str) -> str:
+    if source_name not in SOURCES:
+        raise ValueError(f"未知のソース名です: {source_name}")
+
+    raw_url = SOURCES[source_name]
+
+    response = requests.get(raw_url, timeout=10)
+    response.raise_for_status()
+
+    params = ""
+
+    if source_name.startswith("Education - Toka_Kun"):
+        data = response.json()
+        params = data.get("result", "")
+    elif source_name == "Education - siawaseok":
+        data = response.json()
+        params = data.get("params", "")
+    else:
+        
+        params = response.text.strip()
+
+    embed_url = f"https://www.youtubeeducation.com/embed/{video_id}{params}"
+    return embed_url
 
 app = FastAPI()
 
+
+app.mount("/img", StaticFiles(directory="img"), name="img")
+
 templates = Jinja2Templates(directory="templates")
-templates.env.add_extension('jinja2.ext.do')
+templates.env.add_extension("jinja2.ext.do")
 
-INVIDIOUS_INSTANCES = [
-  "https://invidious.ritoge.com",
-  "https://yt.omada.cafe",
-  "https://invidious.darkness.services",
-  "https://invidious.f5.si",
-  "https://invidious.ducks.party",
-  "https://y.com.sb",
-  "https://super8.absturztau.be",
-  "https://inv.zoomerville.com",
-  "https://invidious.nerdvpn.de",
-  "https://inv.thepixora.com"
-]
+app.include_router(search_router)
+app.include_router(video_router)
+app.include_router(stream_router)
+app.include_router(channel_router)
+app.include_router(short_router)
 
-limits = httpx.Limits(max_connections=300, max_keepalive_connections=100)
-client_session = httpx.AsyncClient(timeout=10.0, limits=limits, follow_redirects=True)
 
-async def fetch_invidious(endpoint: str, params: dict = None, force_instance: str = None):
-    if force_instance:
-        instances = [force_instance] + [i for i in INVIDIOUS_INSTANCES if i != force_instance]
-    else:
-        instances = list(INVIDIOUS_INSTANCES)
-        random.shuffle(instances)
-    
-    last_error = None
-    for instance in instances:
+# --- 404 カスタムエラーハンドラー ---
+@app.exception_handler(StarletteHTTPException)
+async def custom_http_exception_handler(request: Request, exc: StarletteHTTPException):
+    if exc.status_code == 404:
+        return templates.TemplateResponse(
+            "404.html",
+            {"request": request},
+            status_code=404
+        )
+    return JSONResponse(content={"detail": exc.detail}, status_code=exc.status_code)
+
+
+@app.get("/api/recommended")
+async def get_recommended_api(request: Request):
+    try:
+        search_history_json = request.cookies.get("search_history", "[]")
+        search_history = json.loads(search_history_json)
+    except:
+        search_history = []
+
+    recent_keywords = (
+        search_history[-5:]
+        if search_history
+        else ["ボカロ", "VTuber", "ゲーム実況", "音楽", "ニュース"]
+    )
+
+    async def fetch_keyword_results(kw):
         try:
-            url = f"{instance.rstrip('/')}/api/v1{endpoint}"
-            response = await client_session.get(url, params=params, timeout=6.0)
-            response.raise_for_status()
-            return response.json()
-        except (httpx.TimeoutException, httpx.HTTPStatusError, Exception) as e:
-            last_error = e
-            continue
-    
-    raise last_error if last_error else Exception("All instances failed")
+            from app.search import fetch_invidious
+            res = await fetch_invidious(
+                "/search", {"q": kw, "page": 1, "type": "video"}, list_type="search"
+            )
+            if isinstance(res, list):
+                return [
+                    item
+                    for item in res
+                    if item.get("type") == "video" and item.get("videoId")
+                ]
+        except:
+            pass
+        return []
+
+    tasks = [fetch_keyword_results(kw) for kw in recent_keywords]
+    results_list = await asyncio.gather(*tasks)
+
+    recommended_videos = []
+    seen_ids = set()
+    for res in results_list:
+        for item in res:
+            vid = item.get("videoId")
+            if vid and vid not in seen_ids:
+                seen_ids.add(vid)
+                recommended_videos.append(item)
+
+    random.shuffle(recommended_videos)
+    recommended_videos = recommended_videos[:24]
+
+    return JSONResponse(content=recommended_videos)
+
+@app.get("/api/channel_info")
+async def get_channel_info_api(ucid: str):
+    from app.search import fetch_invidious
+    try:
+        data = await fetch_invidious(f"/channels/{ucid}")
+        if isinstance(data, dict):
+            author_icon = ""
+            if "authorThumbnails" in data and len(data["authorThumbnails"]) > 0:
+                author_icon = data["authorThumbnails"][-1].get("url", "")
+            return JSONResponse(content={
+                "ucid": ucid,
+                "name": data.get("author", ucid),
+                "icon": author_icon,
+                "handle": data.get("authorUrl", ""),
+                "description": data.get("description", "")
+            })
+    except Exception:
+        pass
+    return JSONResponse(content={"ucid": ucid, "name": ucid, "icon": "", "handle": "", "description": ""})
+
+# --- 追加: 教育用URL取得API ---
+@app.get("/api/get_education_url")
+def get_education_url_api(video_id: str, source: str):
+    try:
+        url = get_education_embed_url(video_id, source)
+        return {"url": url}
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    return templates.TemplateResponse("home.html", {"request": request})
+    # 初回アクセス判定用フラグをCookieから読み込み
+    has_visited = request.cookies.get("welcome_seen", "false") == "true"
+    if not has_visited:
+        return templates.TemplateResponse(
+            "welcome.html",
+            {"request": request},
+        )
+    return templates.TemplateResponse(
+        "home.html",
+        {"request": request},
+    )
 
-@app.get("/search", response_class=HTMLResponse)
-async def search(request: Request, q: str = Query(...), page: int = 1, type: str = "video", force_instance: str = Query(None)):
-    try:
-        search_type = type if type != "short" else "video"
-        query_q = q if type != "short" else f"{q} shorts"
-        params = {"q": query_q, "page": page, "type": search_type}
-
-        if force_instance:
-            data = await fetch_invidious("/search", params, force_instance=force_instance)
-        else:
-            instances = list(INVIDIOUS_INSTANCES)
-            random.shuffle(instances)
-            target_instances = instances[:4]
-            
-            async def fetch_task(instance):
-                url = f"{instance.rstrip('/')}/api/v1/search"
-                resp = await client_session.get(url, params=params, timeout=4.0)
-                resp.raise_for_status()
-                return resp.json()
-
-            tasks = [asyncio.create_task(fetch_task(inst)) for inst in target_instances]
-            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-            
-            data = None
-            for task in done:
-                try:
-                    data = task.result()
-                    break
-                except:
-                    continue
-            
-            for task in pending:
-                task.cancel()
-            
-            if data is None:
-                data = await fetch_invidious("/search", params)
-
-        results = [{
-            "type": item.get("type"),
-            "videoId": item.get("videoId"),
-            "playlistId": item.get("playlistId"),
-            "authorId": item.get("authorId"),
-            "title": item.get("title"),
-            "lengthSeconds": item.get("lengthSeconds"),
-            "author": item.get("author"),
-            "authorThumbnails": item.get("authorThumbnails"),
-            "videoThumbnails": item.get("videoThumbnails"),
-            "viewCountText": item.get("viewCountText"),
-            "viewCount": item.get("viewCount"),
-            "publishedText": item.get("publishedText"),
-            "subCountText": item.get("subCountText"),
-            "videoCount": item.get("videoCount")
-        } for item in data]
-            
-        return templates.TemplateResponse("search.html", {
-            "request": request, 
-            "query": q, 
-            "results": results,
-            "type": type,
-            "page": page
-        })
-    except httpx.TimeoutException:
-        return templates.TemplateResponse("apitimeout.html", {"request": request})
-    except Exception:
-        return templates.TemplateResponse("apiallerror.html", {"request": request, "instances": INVIDIOUS_INSTANCES})
-
-@app.get("/shorts/{v}", response_class=HTMLResponse)
-async def shorts_player(request: Request, v: str, force_instance: str = Query(None)):
-    try:
-        video_task = fetch_invidious(f"/videos/{v}", force_instance=force_instance)
-        comment_task = fetch_invidious(f"/comments/{v}", force_instance=force_instance)
-        video_data, comment_data = await asyncio.gather(video_task, comment_task, return_exceptions=True)
-
-        if isinstance(video_data, Exception): raise video_data
-        
-        format_streams = video_data.get("formatStreams", [])
-        if format_streams:
-            video_urls = [fmt.get("url") for fmt in format_streams]
-        else:
-            adaptive = video_data.get("adaptiveFormats", [])
-            video_urls = [fmt.get("url") for fmt in adaptive if "video" in fmt.get("type", "")]
-
-        return templates.TemplateResponse("short.html", {
-            "request": request,
-            "videoid": v,
-            "video_title": video_data.get("title"),
-            "videourls": video_urls,
-            "author": video_data.get("author"),
-            "view_count": video_data.get("viewCount", 0),
-            "like_count": video_data.get("likeCount", 0),
-            "description": video_data.get("descriptionHtml", "").replace("\n", "<br>"),
-            "comments": comment_data.get("comments", []) if not isinstance(comment_data, Exception) else []
-        })
-    except httpx.TimeoutException:
-        return templates.TemplateResponse("apitimeout.html", {"request": request})
-    except Exception:
-        return templates.TemplateResponse("apiallerror.html", {"request": request, "instances": INVIDIOUS_INSTANCES})
-
-@app.get("/watch", response_class=HTMLResponse)
-async def watch(request: Request, v: str = Query(...), force_instance: str = Query(None)):
-    try:
-        async def fetch_video_speculative(vid):
-            if force_instance:
-                return await fetch_invidious(f"/videos/{vid}", force_instance=force_instance)
-            
-            instances = list(INVIDIOUS_INSTANCES)
-            random.shuffle(instances)
-            target_instances = instances[:4]
-            
-            async def task(instance):
-                url = f"{instance.rstrip('/')}/api/v1/videos/{vid}"
-                resp = await client_session.get(url, timeout=4.0)
-                resp.raise_for_status()
-                return resp.json()
-
-            tasks = [asyncio.create_task(task(inst)) for inst in target_instances]
-            done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-            
-            res = None
-            for t in done:
-                try: res = t.result(); break
-                except: continue
-            
-            for t in pending: t.cancel()
-            
-            if res is None: res = await fetch_invidious(f"/videos/{vid}")
-            return res
-
-        video_task = fetch_video_speculative(v)
-        comment_task = fetch_invidious(f"/comments/{v}", force_instance=force_instance)
-        video_data, comment_data = await asyncio.gather(video_task, comment_task, return_exceptions=True)
-
-        if isinstance(video_data, Exception): raise video_data
-        
-        adaptive = video_data.get("adaptiveFormats", [])
-        
-        audio_url = None
-        for f in adaptive:
-            if "audio" in f.get("type", ""):
-                if f.get("language") == "ja":
-                    audio_url = f.get("url")
-                    break
-
-        format_streams = video_data.get("formatStreams", [])
-        
-        stream_urls = [{
-            "url": fmt.get("url"),
-            "resolution": fmt.get("qualityLabel"),
-            "format": "mp4/mixed",
-            "audioUrl": ""
-        } for fmt in format_streams]
-        
-        stream_urls.extend({
-            "url": fmt.get("url"),
-            "resolution": fmt.get("qualityLabel"),
-            "format": "webm/videoOnly",
-            "audioUrl": audio_url
-        } for fmt in adaptive if "video" in fmt.get("type", "") and "webm" in fmt.get("container", ""))
-
-        video_urls = [fmt.get("url") for fmt in format_streams] or \
-                     [fmt.get("url") for fmt in adaptive if "video" in fmt.get("type", "")]
-
-        recommended = [{
-            "video_id": rec.get("videoId"),
-            "title": rec.get("title"),
-            "author": rec.get("author"),
-            "view_count_text": rec.get("viewCountText")
-        } for rec in video_data.get("recommendedVideos", [])]
-
-        author_thumbs = video_data.get("authorThumbnails", [])
-        author_icon = author_thumbs[-1]["url"] if author_thumbs else ""
-
-        youtube_url = f"https://www.youtube.com/watch?v={v}"
-
-        response = templates.TemplateResponse("watch.html", {
-            "request": request,
-            "videoid": v,
-            "video_title": video_data.get("title"),
-            "videourls": video_urls,
-            "streamUrls": stream_urls,
-            "author": video_data.get("author"),
-            "author_id": video_data.get("authorId"),
-            "author_icon": author_icon,
-            "subscribers_count": video_data.get("subCountText", "非公開"),
-            "view_count": video_data.get("viewCount", 0),
-            "like_count": video_data.get("likeCount", 0),
-            "description": video_data.get("descriptionHtml", "").replace("\n", "<br>"),
-            "recommended_videos": recommended,
-            "comments": comment_data.get("comments", []) if not isinstance(comment_data, Exception) else [],
-            "youtube_url": youtube_url
-        })
-
-        try:
-            history_json = request.cookies.get("history", "[]")
-            history = json.loads(history_json)
-            history = [item for item in history if item.get("videoId") != v]
-            history.append({
-                "videoId": v,
-                "title": video_data.get("title"),
-                "author": video_data.get("author"),
-                "added_at": datetime.now().strftime("%Y-%m-%d %H:%M")
-            })
-            if len(history) > 50: history = history[-50:]
-            response.set_cookie(key="history", value=json.dumps(history), max_age=2592000, httponly=True)
-        except:
-            pass
-
-        return response
-
-    except httpx.TimeoutException:
-        return templates.TemplateResponse("apitimeout.html", {"request": request})
-    except Exception:
-        return templates.TemplateResponse("apiallerror.html", {"request": request, "instances": INVIDIOUS_INSTANCES})
 
 @app.get("/history", response_class=HTMLResponse)
 async def history_page(request: Request):
@@ -274,7 +176,10 @@ async def history_page(request: Request):
     except:
         history_list = []
     history_list.reverse()
-    return templates.TemplateResponse("history.html", {"request": request, "history": history_list})
+    return templates.TemplateResponse(
+        "history.html", {"request": request, "history": history_list}
+    )
+
 
 @app.get("/history/clear")
 async def clear_history():
@@ -282,148 +187,94 @@ async def clear_history():
     response.delete_cookie("history")
     return response
 
-@app.get("/playlist", response_class=HTMLResponse)
-async def playlist(request: Request, list: str = Query(...), force_instance: str = Query(None)):
-    try:
-        data = await fetch_invidious(f"/playlists/{list}", force_instance=force_instance)
-        return templates.TemplateResponse("playlist.html", {
-            "request": request,
-            "title": data.get("title"),
-            "playlistId": list,
-            "author": data.get("author"),
-            "authorId": data.get("authorId"),
-            "videos": data.get("videos", []),
-            "description": data.get("descriptionHtml", "")
-        })
-    except httpx.TimeoutException:
-        return templates.TemplateResponse("apitimeout.html", {"request": request})
-    except Exception:
-        return templates.TemplateResponse("apiallerror.html", {"request": request, "instances": INVIDIOUS_INSTANCES})
-
-@app.get("/channel/{ucid}", response_class=HTMLResponse)
-async def channel(request: Request, ucid: str, sort_by: str = "newest", tab: str = "videos", force_instance: str = Query(None)):
-    try:
-        tasks = [
-            fetch_invidious(f"/channels/{ucid}", force_instance=force_instance),
-            fetch_invidious(f"/channels/{ucid}/videos", {"sort_by": sort_by}, force_instance=force_instance),
-            fetch_invidious(f"/channels/{ucid}/shorts", force_instance=force_instance),
-            fetch_invidious(f"/channels/{ucid}/playlists", force_instance=force_instance),
-            fetch_invidious(f"/channels/{ucid}/community", force_instance=force_instance)
-        ]
-        
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        
-        channel_data = results[0] if not isinstance(results[0], Exception) else {}
-        videos_data = results[1] if not isinstance(results[1], Exception) else {}
-        shorts_data = results[2] if not isinstance(results[2], Exception) else {}
-        playlists_data = results[3] if not isinstance(results[3], Exception) else {}
-        community_data = results[4] if not isinstance(results[4], Exception) else {}
-
-        # 配列（list型）のレスポンスと辞書（dict型）のレスポンスの双方に対応
-        if isinstance(videos_data, list):
-            final_videos = videos_data
-        elif isinstance(videos_data, dict):
-            final_videos = videos_data.get("videos", [])
-        else:
-            final_videos = []
-
-        if isinstance(shorts_data, list):
-            final_shorts = shorts_data
-        elif isinstance(shorts_data, dict):
-            final_shorts = shorts_data.get("videos", [])
-        else:
-            final_shorts = []
-
-        playlists = []
-        for pl in playlists_data.get("playlists", []) if isinstance(playlists_data, dict) else (playlists_data if isinstance(playlists_data, list) else []):
-            thumb = pl.get("playlistThumbnail", "")
-            if thumb and not thumb.startswith("http"):
-                thumb = f"https://img.youtube.com/vi/{thumb}/mqdefault.jpg"
-            playlists.append({
-                "id": pl.get("playlistId", ""),
-                "title": pl.get("title", ""),
-                "video_count": pl.get("videoCount", 0),
-                "thumbnail": thumb,
-            })
-
-        author_name = channel_data.get("author")
-        author_icon = channel_data.get("authorThumbnails", [{"url": ""}])[-1]["url"] if channel_data.get("authorThumbnails") else ""
-
-        comments_list = community_data.get("comments", []) if isinstance(community_data, dict) else (community_data if isinstance(community_data, list) else [])
-        community = [{
-            "id": post.get("commentId", ""),
-            "content": post.get("contentHtml", "").replace("\n", "<br>"),
-            "published_text": post.get("publishedText", ""),
-            "likes": post.get("likeCount", 0),
-            "author": author_name,
-            "author_icon": author_icon,
-        } for post in comments_list]
-
-        return templates.TemplateResponse("channel.html", {
-            "request": request,
-            "ucid": ucid,
-            "author": author_name,
-            "author_icon": author_icon,
-            "sub_count": channel_data.get("subCountText", "非公開"),
-            "description": channel_data.get("descriptionHtml", ""),
-            "videos": final_videos,
-            "shorts": final_shorts,
-            "playlists": playlists,
-            "community": community,
-            "sort_by": sort_by,
-            "tab": tab
-        })
-    except httpx.TimeoutException:
-        return templates.TemplateResponse("apitimeout.html", {"request": request})
-    except Exception:
-        return templates.TemplateResponse("apiallerror.html", {"request": request, "instances": INVIDIOUS_INSTANCES})
 
 @app.get("/suggest")
 async def suggest(keyword: str):
-    instances = list(INVIDIOUS_INSTANCES)
-    random.shuffle(instances)
-    for instance in instances:
+    from app.search import fetch_with_inflight
+    cache_key = f"suggest:{keyword}"
+
+    async def _do_fetch():
+        from app.search import client_session
         try:
-            resp = await client_session.get(f"{instance.rstrip('/')}/api/v1/search/suggestions", params={"q": keyword}, timeout=1.5)
+            url = "https://suggestqueries.google.com/complete/search"
+            params = {
+                "client": "firefox",
+                "q": keyword,
+                "hl": "ja",
+                "ie": "utf-8",
+                "oe": "utf-8",
+            }
+            resp = await client_session.get(url, params=params, timeout=2.0)
+            
             if resp.status_code == 200:
-                return resp.json().get("suggestions", [])
-        except: continue
-    return []
+                text = resp.content.decode("utf-8", errors="replace")
+                data = json.loads(text)
+                
+                if isinstance(data, list) and len(data) > 1 and isinstance(data[1], list):
+                    return data[1]
+        except Exception:
+            pass
+        return []
+
+    return await fetch_with_inflight(cache_key, _do_fetch, ttl=600.0)
+
 
 @app.get("/proxy/thumb")
 async def proxy_thumb(v: str):
-    thumb_url = f"https://i.ytimg.com/vi/{v}/mqdefault.jpg"
-    try:
-        resp = await client_session.get(thumb_url, timeout=4.0)
-        return Response(content=resp.content, media_type="image/jpeg")
-    except: return Response(status_code=404)
+    from app.search import fetch_with_inflight, client_session
+    cache_key = f"thumb:{v}"
+
+    async def _do_fetch():
+        thumb_url = f"https://i.ytimg.com/vi/{v}/mqdefault.jpg"
+        try:
+            resp = await client_session.get(thumb_url, timeout=3.0)
+            if resp.status_code == 200:
+                return resp.content
+        except:
+            pass
+        return None
+
+    content = await fetch_with_inflight(cache_key, _do_fetch, ttl=1800.0)
+    if content:
+        return Response(content=content, media_type="image/jpeg")
+    return Response(status_code=404)
+
 
 @app.get("/thumbnail")
 async def thumbnail(v: str):
     return await proxy_thumb(v)
 
+
 @app.get("/games", response_class=HTMLResponse)
 async def read_games(request: Request):
     return templates.TemplateResponse("games.html", {"request": request})
+
 
 @app.get("/block.html", response_class=HTMLResponse)
 async def read_block(request: Request):
     return templates.TemplateResponse("block.html", {"request": request})
 
+
 @app.get("/tumu.html", response_class=HTMLResponse)
 async def read_tumu(request: Request):
     return templates.TemplateResponse("tumu.html", {"request": request})
+
 
 @app.get("/2048.html", response_class=HTMLResponse)
 async def read_2048(request: Request):
     return templates.TemplateResponse("2048.html", {"request": request})
 
+
 @app.get("/status", response_class=HTMLResponse)
 async def read_status(request: Request):
+    from app.search import client_session, get_invidious_instances_from_url, INVIDIOUS_VIDEO_LIST_URL
+    
     async def check_instance(instance):
         start_time = asyncio.get_event_loop().time()
         try:
-            resp = await client_session.get(f"{instance.rstrip('/')}/api/v1/stats", timeout=4.0)
+            resp = await client_session.get(
+                f"{instance.rstrip('/')}/api/v1/stats", timeout=3.0
+            )
             latency = (asyncio.get_event_loop().time() - start_time) * 1000
             if resp.status_code == 200:
                 data = resp.json()
@@ -432,26 +283,96 @@ async def read_status(request: Request):
                     "status": "Online",
                     "latency": f"{int(latency)}ms",
                     "version": data.get("software", {}).get("version", "unknown"),
-                    "users": data.get("usage", {}).get("users", {}).get("total", 0)
+                    "users": data.get("usage", {}).get("users", {}).get("total", 0),
                 }
-            return {"instance": instance, "status": f"Error {resp.status_code}", "latency": "-", "version": "-", "users": "-"}
+            return {
+                "instance": instance,
+                "status": f"Error {resp.status_code}",
+                "latency": "-",
+                "version": "-",
+                "users": "-",
+            }
         except:
-            return {"instance": instance, "status": "Offline", "latency": "-", "version": "-", "users": "-"}
+            return {
+                "instance": instance,
+                "status": "Offline",
+                "latency": "-",
+                "version": "-",
+                "users": "-",
+            }
 
-    status_results = await asyncio.gather(*(check_instance(inst) for inst in INVIDIOUS_INSTANCES))
-    return templates.TemplateResponse("status.html", {"request": request, "instances": status_results})
+    video_instances = await get_invidious_instances_from_url(
+        INVIDIOUS_VIDEO_LIST_URL
+    )
+    status_results = await asyncio.gather(
+        *(check_instance(inst) for inst in video_instances)
+    )
+    return templates.TemplateResponse(
+        "status.html", {"request": request, "instances": status_results}
+    )
+
 
 @app.get("/subscriptions", response_class=HTMLResponse)
 async def subscriptions_page(request: Request):
     return templates.TemplateResponse("subscriptions.html", {"request": request})
 
+
 @app.get("/bbs", response_class=HTMLResponse)
 async def bbs_page(request: Request):
     return templates.TemplateResponse("bbs.html", {"request": request})
 
-@app.get("/ytdl", response_class=HTMLResponse)
+
+@app.get("/downloader", response_class=HTMLResponse)
 async def ytdl_page(request: Request):
     return templates.TemplateResponse("bbs.html", {"request": request})
+
+
+@app.get("/setting", response_class=HTMLResponse)
+async def setting_page(request: Request):
+    return templates.TemplateResponse("setting.html", {"request": request})
+
+@app.get("/gameview", response_class=HTMLResponse)
+async def gameview_page(request: Request):
+    return templates.TemplateResponse("gameview.html", {"request": request})
+
+@app.get("/other", response_class=HTMLResponse)
+async def other_page(request: Request):
+    return templates.TemplateResponse("other.html", {"request": request})
+
+@app.get("/editor", response_class=HTMLResponse)
+async def other_page(request: Request):
+    return templates.TemplateResponse("editor.html", {"request": request})
+
+@app.get("/other-sites", response_class=HTMLResponse)
+async def other_page(request: Request):
+    return templates.TemplateResponse("other-sites.html", {"request": request})
+
+@app.get("/about", response_class=HTMLResponse)
+async def other_page(request: Request):
+    return templates.TemplateResponse("about.html", {"request": request})
+    
+@app.get("/help", response_class=HTMLResponse)
+async def help_page(request: Request):
+    return templates.TemplateResponse("help.html", {"request": request})
+
+@app.get("/embed/{video_id}", response_class=HTMLResponse)
+async def embed_player(request: Request, video_id: str):
+    return templates.TemplateResponse("embed.html", {"request": request})
+
+@app.get("/embed", response_class=HTMLResponse)
+async def embed_player_query(request: Request, v: str = Query(None)):
+    return templates.TemplateResponse("embed.html", {"request": request})
+
+@app.get("/select", response_class=HTMLResponse)
+async def select_video_page(request: Request, v: str = ""):
+    return templates.TemplateResponse(
+        "select.html",
+        {
+            "request": request,
+            "video_id": v
+        }
+    )
+
 
 if __name__ == "__main__":
     import uvicorn
