@@ -604,13 +604,18 @@
         border: 2px solid #ff4d4d !important;  
         background: var(--yt-alert-error-bg);  
     }  
-  
-    #floating-control {  
-        position: fixed;  
+      #floating-control {  
+        position: fixed !important;  
         bottom: 24px;  
         right: 24px;  
         z-index: 2500;  
         display: flex;  
+        align-items: center;  
+        justify-content: center;  
+        /* スマホ等のセーフエリア（ホームバー）に対応 */
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+        padding-right: env(safe-area-inset-right, 0px);
+        pointer-events: auto;
     }  
   
     .yt-control-trigger {  
@@ -625,11 +630,22 @@
         justify-content: center;  
         font-size: 1.1rem;  
         cursor: pointer;  
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);  
-        transition: transform 0.2s;  
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);  
+        transition: transform 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;  
+        outline: none;
+        -webkit-tap-highlight-color: transparent;
     }  
   
-    .yt-control-trigger:hover { transform: scale(1.05); }  
+    .yt-control-trigger:hover { 
+        transform: scale(1.08); 
+        background-color: var(--yt-spec-button-chip-hover);
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
+    } 
+
+    .yt-control-trigger:active {
+        transform: scale(0.95);
+    }
+
   
     #controlPanel {  
         display: none;  
@@ -878,10 +894,11 @@
 </div>  
 
 <div id="floating-control">  
-    <div class="yt-control-trigger" onclick="toggleControlPanel()">  
+    <button type="button" class="yt-control-trigger" aria-label="コントロールパネルを開く" onclick="toggleControlPanel()">  
         <i class="fas fa-cog"></i>  
-    </div>  
-</div>  
+    </button>  
+</div>
+
 
 <div id="controlPanel">  
     <div class="cp-header">  
@@ -1465,10 +1482,25 @@
         video.play();  
     }  
   
+        document.addEventListener('click', (e) => {  
+        if (!e.target.closest('#qualitySelect')) {  
+            document.getElementById('qualitySelect').classList.remove('open');  
+        }  
+        if (!e.target.closest('#apiInfoSelect')) {  
+            document.getElementById('apiInfoSelect').classList.remove('open');  
+        }  
+        const panel = document.getElementById('controlPanel');  
+        const trigger = document.querySelector('.yt-control-trigger');  
+        if (panel.classList.contains('open') && !panel.contains(e.target) && !trigger.contains(e.target)) {  
+            toggleControlPanel();  
+        }  
+    });  
+
     function toggleControlPanel() {  
         const panel = document.getElementById('controlPanel');  
         panel.classList.toggle('open');  
-    }  
+    }
+
   
     function switchCpTab(idx) {  
         const tabs = document.querySelectorAll('.cp-tab');  
