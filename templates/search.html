@@ -314,11 +314,13 @@
         margin-bottom: 32px;
     }
 
-    /* ホーム画面上部のShorts横スクロールセクション */
+    /* ホーム画面上部のShorts横スクロールセクション（画面サイズに合わせて調整） */
     .home-shorts-section {
         margin-bottom: 32px;
         border-bottom: 1px solid var(--yt-border-color);
         padding-bottom: 24px;
+        width: 100%;
+        box-sizing: border-box;
     }
 
     .home-shorts-container {
@@ -328,6 +330,8 @@
         padding-bottom: 12px;
         scrollbar-width: thin;
         scroll-behavior: smooth;
+        width: 100%;
+        box-sizing: border-box;
     }
 
     .home-shorts-container::-webkit-scrollbar {
@@ -338,12 +342,12 @@
         border-radius: 3px;
     }
 
-    /* Shortsカードを適度な小ささのサイズに調整 (一画面に5〜6個程度収まる幅160px〜180px程度) */
+    /* 動画カード3つ分相当の幅にぴったり適合させ横スクロール可能にする計算設定 */
     .home-shorts-container .video-card.is-short,
     .home-shorts-container .skeleton-card {
-        flex: 0 0 170px;
-        width: 170px;
-        max-width: 170px;
+        flex: 0 0 calc((100% - 32px) / 3);
+        min-width: 140px;
+        max-width: 220px;
         box-sizing: border-box;
     }
 
@@ -591,6 +595,12 @@
             flex: none;
             width: 100%;
             max-width: 100%;
+        }
+
+        .home-shorts-container .video-card.is-short,
+        .home-shorts-container .skeleton-card {
+            flex: 0 0 calc((100% - 16px) / 2.2);
+            min-width: 120px;
         }
     }
 </style>
