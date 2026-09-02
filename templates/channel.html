@@ -318,21 +318,16 @@
 
     /* 概要ダイアログ Modal */
     .modal-overlay {
-        display: flex;
+        display: none;
         position: fixed;
-        top: 0; left: 0; right: 0; bottom: 0;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
         background-color: rgba(0, 0, 0, 0.6);
         z-index: 2000;
         align-items: center;
         justify-content: center;
-        opacity: 0;
-        visibility: hidden;
-        transition: opacity 0.2s ease, visibility 0.2s ease;
-    }
-
-    .modal-overlay.active {
-        opacity: 1;
-        visibility: visible;
     }
 
     .modal-content {
@@ -345,6 +340,7 @@
         padding: 24px;
         overflow-y: auto;
         box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        margin: auto;
     }
 
     .modal-header {
@@ -590,17 +586,11 @@
 {% block extra_js %}
 <script>
     function openAboutModal() {
-        const modal = document.getElementById('aboutModal');
-        if (modal) {
-            modal.classList.add('active');
-        }
+        document.getElementById('aboutModal').style.display = 'flex';
     }
 
     function closeAboutModal(e) {
-        const modal = document.getElementById('aboutModal');
-        if (modal) {
-            modal.classList.remove('active');
-        }
+        document.getElementById('aboutModal').style.display = 'none';
     }
 
     function updateSubscribeState(isSubscribed) {
