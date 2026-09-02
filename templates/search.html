@@ -309,9 +309,11 @@
 
     .shorts-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-        gap: 12px;
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: 16px;
         margin-bottom: 32px;
+        width: 100%;
+        box-sizing: border-box;
     }
 
     /* ホーム画面上部のShorts横スクロールセクション（画面サイズに合わせて調整） */
@@ -320,7 +322,9 @@
         border-bottom: 1px solid var(--yt-border-color);
         padding-bottom: 24px;
         width: 100%;
+        max-width: 100%;
         box-sizing: border-box;
+        overflow: hidden;
     }
 
     .home-shorts-container {
@@ -331,6 +335,7 @@
         scrollbar-width: thin;
         scroll-behavior: smooth;
         width: 100%;
+        max-width: 100%;
         box-sizing: border-box;
     }
 
@@ -342,12 +347,11 @@
         border-radius: 3px;
     }
 
-    /* 動画カード3つ分相当の幅にぴったり適合させ横スクロール可能にする計算設定 */
+    /* コンテナおよび画面幅からはみ出さないように可変サイズ幅を最適化 */
     .home-shorts-container .video-card.is-short,
     .home-shorts-container .skeleton-card {
-        flex: 0 0 calc((100% - 32px) / 3);
-        min-width: 140px;
-        max-width: 220px;
+        flex: 0 0 clamp(140px, 18vw, 200px);
+        width: clamp(140px, 18vw, 200px);
         box-sizing: border-box;
     }
 
@@ -599,8 +603,8 @@
 
         .home-shorts-container .video-card.is-short,
         .home-shorts-container .skeleton-card {
-            flex: 0 0 calc((100% - 16px) / 2.2);
-            min-width: 120px;
+            flex: 0 0 130px;
+            width: 130px;
         }
     }
 </style>
