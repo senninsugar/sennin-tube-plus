@@ -318,13 +318,21 @@
 
     /* 概要ダイアログ Modal */
     .modal-overlay {
-        display: none;
+        display: flex;
         position: fixed;
         top: 0; left: 0; right: 0; bottom: 0;
         background-color: rgba(0, 0, 0, 0.6);
         z-index: 2000;
         align-items: center;
         justify-content: center;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.2s ease, visibility 0.2s ease;
+    }
+
+    .modal-overlay.active {
+        opacity: 1;
+        visibility: visible;
     }
 
     .modal-content {
@@ -582,11 +590,17 @@
 {% block extra_js %}
 <script>
     function openAboutModal() {
-        document.getElementById('aboutModal').style.display = 'flex';
+        const modal = document.getElementById('aboutModal');
+        if (modal) {
+            modal.classList.add('active');
+        }
     }
 
     function closeAboutModal(e) {
-        document.getElementById('aboutModal').style.display = 'none';
+        const modal = document.getElementById('aboutModal');
+        if (modal) {
+            modal.classList.remove('active');
+        }
     }
 
     function updateSubscribeState(isSubscribed) {
