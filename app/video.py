@@ -937,7 +937,7 @@ async def fetch_sia_video(video_id: str) -> Optional[Dict[str, Any]]:
 
 _SENNIN_BASE_URL = os.environ.get(
     "SENNIN_API_BASE",
-    "https://discerning-adventure-production-ebfc.up.railway.app",
+    "https://ytapi-production-90b2.up.railway.app",
 )
 
 
