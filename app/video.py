@@ -4636,7 +4636,11 @@ async def watch(
                     )
                 ),
 
-                                           "viewCount",
+                "view_count": (
+                    v_data.get(
+                        "viewCount",
+                        s_data.get(
+                            "viewCount",
                             0,
                         ),
                     )
