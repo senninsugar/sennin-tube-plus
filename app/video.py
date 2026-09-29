@@ -4636,9 +4636,87 @@ async def watch(
                     )
                 ),
 
-                "view_count": (
+                                           "viewCount",
+                            0,
+                        ),
+                    )
+                ),
+
+                "like_count": v_data.get(
+                    "likeCount",
+                    0,
+                ),
+
+                "description": (
                     v_data.get(
-                        "viewCount",
-                        s_data.get(
-                            "viewCount",
-    
+                        "descriptionHtml"
+                    )
+                    or (
+                        v_data.get(
+                            "description",
+                            "",
+                        ) or ""
+                    ).replace(
+                        "\n",
+                        "<br>",
+                    )
+                ),
+
+                "published": v_data.get(
+                    "publishedText",
+                    "",
+                ),
+
+                "comments": formatted_comments,
+
+                "recommended_videos": recommended,
+
+                "playlist_videos": playlist_videos,
+
+                "playlist_id": list,
+
+                "info_api_used": info_api_used,
+                "stream_api_used": stream_api_used,
+                "api_used": info_api_used,
+            },
+        )
+
+        return response
+
+    except httpx.TimeoutException:
+
+        logger.error(
+            "Timeout in watch: %s",
+            v,
+        )
+
+        return templates.TemplateResponse(
+            "apitimeout.html",
+            {
+                "request": request
+            },
+        )
+
+    except Exception as exc:
+
+        logger.error(
+            "Error in watch %s: %s",
+            v,
+            exc,
+        )
+
+        try:
+
+            instances = await get_video_back_instances()
+
+        except Exception:
+
+            instances = []
+
+        return templates.TemplateResponse(
+            "apiallerror.html",
+            {
+                "request": request,
+                "instances": instances,
+            },
+        )
