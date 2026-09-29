@@ -8,7 +8,7 @@ import pathlib
 import re
 import time
 from typing import Optional, Dict, Any, List, Union, Tuple
-from urllib.parse import quote, urlparse
+from urllib.parse import quote, urlparse, urljoin
 
 import httpx
 from fastapi import APIRouter, Query, Request
@@ -24,6 +24,10 @@ APP_NAME = "sennin-tube-plus"
 INVIDIOUS_LIST_URL = "https://raw.githubusercontent.com/kuru-bana/yt-data/refs/heads/main/list/injidious.json"
 INNERTUBE_BASE = "https://choco-youtube-js.onrender.com"
 CACHE_TTL = 5 * 60
+
+# nocookie 埋め込みが使えるので、APIの結果は最大この秒数だけ待ってページを表示する
+PAGE_WAIT_SECONDS = 4.0
+NOCOOKIE_EMBED_BASE = "https://www.youtube-nocookie.com/embed/"
 
 KEEPALIVE_TARGETS = [
     f"{INNERTUBE_BASE}/version",
@@ -67,7 +71,7 @@ async def _periodic_keepalive():
 LINKUP_JSON_URL = "https://raw.githubusercontent.com/kuru-bana/Choco-Tube-Plus/main/linkup.json"
 
 
-async def _fetch_linkup_bases() -> list[str]:
+async def _fetch_linkup_bases() -> "list[str]":
     try:
         client = await get_client()
         resp = await client.get(LINKUP_JSON_URL, timeout=10)
@@ -115,23 +119,23 @@ category_cache: dict = {}
 
 _proxy_resp_cache: dict = {}
 _proxy_resp_ttl: dict = {
-    "video":           180,
-    "trending":        300,
-    "trending_music":  300,
+    "video": 180,
+    "trending": 300,
+    "trending_music": 300,
     "trending_gaming": 300,
-    "trending_news":   300,
+    "trending_news": 300,
     "trending_movies": 300,
-    "search":          60,
+    "search": 60,
     "search_suggestions": 30,
-    "channel":         120,
-    "channel_videos":  120,
-    "channel_shorts":  120,
+    "channel": 120,
+    "channel_videos": 120,
+    "channel_shorts": 120,
     "channel_streams": 120,
-    "channel_latest":  120,
-    "popular":         300,
-    "hashtag":         90,
-    "comments":        120,
-    "playlist":        180,
+    "channel_latest": 120,
+    "popular": 300,
+    "hashtag": 90,
+    "comments": 120,
+    "playlist": 180,
 }
 _PROXY_RESP_DEFAULT_TTL = 60
 _PROXY_RESP_MAX_SIZE = 150
@@ -192,7 +196,10 @@ async def _try_instance(base: str, invidious_path: str) -> dict:
 
 def _has_valid_videos(data) -> bool:
     items = data if isinstance(data, list) else data.get("videos", [])
-    return any(not item.get("errorMessage") and (item.get("videoId") or item.get("title")) for item in items)
+    return any(
+        not item.get("errorMessage") and (item.get("videoId") or item.get("title"))
+        for item in items
+    )
 
 
 def _has_valid_stream(data) -> bool:
@@ -215,7 +222,7 @@ def _innertube_cont_set(channel_id: str, tab: str, inv_cont: str, innertube_key:
         del _innertube_cont_cache[k]
 
 
-def _innertube_cont_get(channel_id: str, tab: str, inv_cont: str) -> str | None:
+def _innertube_cont_get(channel_id: str, tab: str, inv_cont: str) -> "str | None":
     key = (channel_id, tab, inv_cont)
     entry = _innertube_cont_cache.get(key)
     if not entry:
@@ -354,7 +361,7 @@ def _apply_enrichment(data, innertube_items: list, channel_id: str):
     return data
 
 
-def _proxy_cache_get(key: str) -> dict | None:
+def _proxy_cache_get(key: str) -> "dict | None":
     entry = _proxy_resp_cache.get(key)
     if not entry:
         return None
@@ -401,30 +408,44 @@ async def proxy_parallel(
     override_instances: list = None,
     no_cache: bool = False,
 ) -> dict:
-    cache_key = f"{category}:{invidious_path}"
+    # prefer_* が違う呼び出し同士でキャッシュ/待ち合わせが混ざらないようキーに含める
+    cache_key = (
+        f"{category}:{invidious_path}:"
+        f"{int(prefer_valid_videos)}{int(prefer_valid_stream)}"
+    )
     ttl = _proxy_resp_ttl.get(category, _PROXY_RESP_DEFAULT_TTL)
+    use_cache = not no_cache and not exclude_list and override_instances is None
 
-    if not no_cache and not exclude_list and override_instances is None:
+    if use_cache:
         cached = _proxy_cache_get(cache_key)
         if cached is not None:
             return cached
 
         if cache_key in _proxy_inflight:
-            fut = _proxy_inflight[cache_key]
+            waiting = _proxy_inflight[cache_key]
             try:
-                return await asyncio.shield(fut)
+                return await asyncio.shield(waiting)
+            except asyncio.CancelledError:
+                raise
             except Exception:
                 pass
 
     loop = asyncio.get_event_loop()
     fut: asyncio.Future = loop.create_future()
-    if not no_cache and not exclude_list and override_instances is None:
+    if use_cache:
         _proxy_inflight[cache_key] = fut
 
     try:
-        instances = override_instances if override_instances is not None else await get_instances(category)
+        instances = (
+            override_instances
+            if override_instances is not None
+            else await get_instances(category)
+        )
         if exclude_list:
-            instances = [b for b in instances if not any(ex in b or b in ex for ex in exclude_list)]
+            instances = [
+                b for b in instances
+                if not any(ex in b or b in ex for ex in exclude_list)
+            ]
         if not instances:
             raise Exception(f'No working instances for category "{category}" after exclusions')
 
@@ -476,7 +497,7 @@ async def proxy_parallel(
             category_cache.pop(category, None)
             raise Exception("All instances failed: " + ", ".join(errors))
 
-        if not no_cache and not exclude_list and override_instances is None:
+        if use_cache:
             _proxy_cache_set(cache_key, best, ttl)
 
         if not fut.done():
@@ -488,11 +509,19 @@ async def proxy_parallel(
             fut.set_exception(exc)
             try:
                 fut.exception()
-            except Exception:
+            except BaseException:
                 pass
         raise
     finally:
-        _proxy_inflight.pop(cache_key, None)
+        # キャンセル(CancelledError)でも待機側が永遠に固まらないよう必ず解決する
+        if not fut.done():
+            fut.set_exception(RuntimeError("request cancelled"))
+            try:
+                fut.exception()
+            except BaseException:
+                pass
+        if _proxy_inflight.get(cache_key) is fut:
+            _proxy_inflight.pop(cache_key, None)
 
 
 def map_path(app_path: str) -> tuple:
@@ -512,29 +541,35 @@ def map_path(app_path: str) -> tuple:
         return "video", f"/api/v1/videos/{m.group(1)}{m.group(2)}"
 
     if app_path.startswith("/api/search/suggestions"):
-        return "search_suggestions", "/api/v1/search/suggestions" + app_path[len("/api/search/suggestions"):]
+        return (
+            "search_suggestions",
+            "/api/v1/search/suggestions" + app_path[len("/api/search/suggestions"):],
+        )
 
-    m = re.match(r"^/api/channels/([^/?]+)/(videos|shorts|streams|latest|playlists|comments|search)(.*)", app_path)
+    m = re.match(
+        r"^/api/channels/([^/?]+)/(videos|shorts|streams|latest|playlists|comments|search)(.*)",
+        app_path,
+    )
     if m:
         sub = m.group(2)
         return f"channel_{sub}", f"/api/v1/channels/{m.group(1)}/{sub}{m.group(3)}"
 
     prefix_map = [
-        ("/api/trending",    "trending"),
-        ("/api/search",      "search"),
-        ("/api/channels",    "channel"),
-        ("/api/videos",      "video"),
-        ("/api/playlists",   "playlist"),
-        ("/api/mixes",       "mix"),
-        ("/api/hashtag",     "hashtag"),
-        ("/api/comments",    "comments"),
+        ("/api/trending", "trending"),
+        ("/api/search", "search"),
+        ("/api/channels", "channel"),
+        ("/api/videos", "video"),
+        ("/api/playlists", "playlist"),
+        ("/api/mixes", "mix"),
+        ("/api/hashtag", "hashtag"),
+        ("/api/comments", "comments"),
         ("/api/transcripts", "transcripts"),
-        ("/api/captions",    "captions"),
+        ("/api/captions", "captions"),
         ("/api/annotations", "annotations"),
-        ("/api/clip",        "clip"),
-        ("/api/resolveurl",  "resolveurl"),
-        ("/api/popular",     "popular"),
-        ("/api/stats",       "stats"),
+        ("/api/clip", "clip"),
+        ("/api/resolveurl", "resolveurl"),
+        ("/api/popular", "popular"),
+        ("/api/stats", "stats"),
     ]
     for prefix, category in prefix_map:
         if app_path.startswith(prefix):
@@ -604,29 +639,18 @@ _cache_lock = asyncio.Lock()
 async def _cache_get(key: str) -> Optional[Any]:
     async with _cache_lock:
         entry = _simple_cache.get(key)
-
         if entry is None:
             return None
-
         value, expire_at = entry
-
         if time.monotonic() > expire_at:
             _simple_cache.pop(key, None)
             return None
-
         return value
 
 
-async def _cache_set(
-    key: str,
-    value: Any,
-    ttl: float,
-) -> None:
+async def _cache_set(key: str, value: Any, ttl: float) -> None:
     async with _cache_lock:
-        _simple_cache[key] = (
-            value,
-            time.monotonic() + ttl,
-        )
+        _simple_cache[key] = (value, time.monotonic() + ttl)
 
 
 async def _cache_delete(key: str) -> None:
@@ -634,33 +658,17 @@ async def _cache_delete(key: str) -> None:
         _simple_cache.pop(key, None)
 
 
-async def record_api_performance(
-    api: str,
-    success: bool,
-    duration: float,
-) -> None:
-
+async def record_api_performance(api: str, success: bool, duration: float) -> None:
     async with _STATS_LOCK:
-
         if api not in _API_STATS:
             return
-
         stats = _API_STATS[api]
-
         if success:
             old_total = stats["success"] + stats["failure"]
-
             stats["success"] += 1
-
             new_total = old_total + 1
-
             if new_total > 0:
-                stats["avg_time"] = (
-                    (
-                        stats["avg_time"] * old_total
-                    ) + duration
-                ) / new_total
-
+                stats["avg_time"] = ((stats["avg_time"] * old_total) + duration) / new_total
         else:
             stats["failure"] += 1
 
@@ -682,566 +690,248 @@ _PIPED_INSTANCES = [
 ]
 
 
-async def _fetch_piped_data(
-    video_id: str,
-) -> Optional[Dict[str, Any]]:
+async def _fetch_piped_data(video_id: str) -> Optional[Dict[str, Any]]:
+    """Piped の全インスタンスへ並列に問い合わせ、最初に成功したものを返す。"""
 
-    for instance in _PIPED_INSTANCES:
-
+    async def one(instance: str) -> Optional[Dict[str, Any]]:
         try:
-
             client = await get_client()
-
             response = await client.get(
                 f"{instance}/streams/{video_id}",
-                timeout=httpx.Timeout(
-                    12.0,
-                    connect=4.0,
-                    read=8.0,
-                ),
-                headers={
-                    "User-Agent": DEFAULT_UA,
-                },
+                timeout=httpx.Timeout(12.0, connect=4.0, read=8.0),
+                headers={"User-Agent": DEFAULT_UA},
             )
-
             if response.status_code != 200:
-                continue
-
+                return None
             data = response.json()
-
             if not isinstance(data, dict):
-                continue
-
+                return None
             if data.get("error"):
-                continue
-
+                return None
             if not data.get("title"):
-                continue
-
+                return None
             data["_piped_instance"] = instance
-
             return data
-
         except Exception as exc:
+            logger.debug("Piped instance failed %s: %s", instance, exc)
+            return None
 
-            logger.debug(
-                "Piped instance failed %s: %s",
-                instance,
-                exc,
-            )
-
+    tasks = [asyncio.create_task(one(i)) for i in _PIPED_INSTANCES]
+    try:
+        for coro in asyncio.as_completed(tasks):
+            result = await coro
+            if result:
+                return result
+    finally:
+        for t in tasks:
+            if not t.done():
+                t.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
     return None
 
 
-def _piped_date_to_relative(
-    date_str: str,
-) -> str:
-
+def _piped_date_to_relative(date_str: str) -> str:
     try:
-
-        dt = datetime.date.fromisoformat(
-            date_str[:10]
-        )
-
+        dt = datetime.date.fromisoformat(date_str[:10])
         today = datetime.date.today()
-
         days = (today - dt).days
-
         if days < 0:
             return date_str
-
         if days == 0:
             return "今日"
-
         if days < 30:
             return f"{days} 日前"
-
         if days < 365:
             return f"{days // 30} ヶ月前"
-
         return f"{days // 365} 年前"
-
     except Exception:
         return date_str
 
 
-def _format_sub_count(
-    count: Any,
-) -> str:
-
+def _format_sub_count(count: Any) -> str:
     try:
         count = int(count or 0)
     except Exception:
         return str(count or "")
-
     if count <= 0:
         return ""
-
     if count >= 1_000_000:
         return f"{count / 1_000_000:.1f}M"
-
     if count >= 1_000:
         return f"{round(count / 1_000)}K"
-
     return str(count)
 
 
-def _piped_to_video_info(
-    piped: Dict[str, Any],
-    video_id: str,
-) -> Dict[str, Any]:
-
-    uploader_url = piped.get(
-        "uploaderUrl",
-        "",
-    )
-
+def _piped_to_video_info(piped: Dict[str, Any], video_id: str) -> Dict[str, Any]:
+    uploader_url = piped.get("uploaderUrl", "") or ""
     author_id = ""
 
     if "/channel/" in uploader_url:
-
-        author_id = (
-            uploader_url
-            .split("/channel/")[-1]
-            .strip("/")
-        )
-
+        author_id = uploader_url.split("/channel/")[-1].strip("/")
     elif uploader_url.startswith("/@"):
-
         author_id = uploader_url[1:]
-
     elif uploader_url.startswith("/c/"):
-
         author_id = uploader_url[3:]
 
-    avatar = piped.get(
-        "uploaderAvatar",
-        "",
-    )
+    avatar = piped.get("uploaderAvatar", "") or ""
 
     author_thumbnails = []
-
     if avatar:
-        author_thumbnails = [
-            {
-                "url": avatar,
-                "width": 48,
-                "height": 48,
-            }
-        ]
+        author_thumbnails = [{"url": avatar, "width": 48, "height": 48}]
 
-    thumbnail = piped.get(
-        "thumbnailUrl",
-        "",
-    )
-
-    video_thumbnails = []
-
-    if thumbnail:
-        video_thumbnails = [
-            {
-                "quality": "maxresdefault",
-                "url": thumbnail,
-                "width": 1280,
-                "height": 720,
-            }
-        ]
+    thumbnail = piped.get("thumbnailUrl", "") or ""
 
     recommended = []
 
-    for item in (
-        piped.get("relatedStreams")
-        or []
-    ):
-
+    for item in (piped.get("relatedStreams") or []):
         if not isinstance(item, dict):
             continue
-
-        if item.get("type") not in (
-            None,
-            "stream",
-        ):
+        if item.get("type") not in (None, "stream"):
             continue
 
-        raw_url = item.get(
-            "url",
-            "",
-        )
-
+        raw_url = item.get("url", "") or ""
         related_id = ""
 
         if "?v=" in raw_url:
-
-            related_id = (
-                raw_url
-                .split("?v=", 1)[1]
-                .split("&", 1)[0]
-            )
-
+            related_id = raw_url.split("?v=", 1)[1].split("&", 1)[0]
         elif "/watch?v=" in raw_url:
-
-            related_id = (
-                raw_url
-                .split("/watch?v=", 1)[1]
-                .split("&", 1)[0]
-            )
+            related_id = raw_url.split("/watch?v=", 1)[1].split("&", 1)[0]
 
         if not related_id:
-            related_id = (
-                item.get("videoId")
-                or item.get("id")
-                or ""
-            )
-
+            related_id = item.get("videoId") or item.get("id") or ""
         if not related_id:
             continue
 
-        related_thumb = item.get(
-            "thumbnail",
-            "",
-        )
+        related_thumb = item.get("thumbnail", "") or ""
 
         recommended.append(
             {
                 "videoId": related_id,
                 "video_id": related_id,
-                "title": item.get(
-                    "title",
-                    "",
-                ),
-                "author": item.get(
-                    "uploaderName",
-                    "",
-                ),
+                "title": item.get("title", ""),
+                "author": item.get("uploaderName", ""),
                 "authorId": "",
-                "lengthSeconds": item.get(
-                    "duration",
-                    0,
-                ) or 0,
-                "viewCount": item.get(
-                    "views",
-                    0,
-                ) or 0,
-                "view_count_text": str(
-                    item.get(
-                        "views",
-                        "",
-                    )
-                    or ""
-                ),
-                "publishedText": item.get(
-                    "uploadedDate",
-                    "",
-                ),
+                "lengthSeconds": item.get("duration", 0) or 0,
+                "viewCount": item.get("views", 0) or 0,
+                "view_count_text": str(item.get("views", "") or ""),
+                "publishedText": item.get("uploadedDate", ""),
                 "thumbnail": related_thumb,
                 "videoThumbnails": (
-                    [
-                        {
-                            "quality": "hq",
-                            "url": related_thumb,
-                        }
-                    ]
-                    if related_thumb
-                    else []
+                    [{"quality": "hq", "url": related_thumb}] if related_thumb else []
                 ),
             }
         )
 
-    sub_count = (
-        piped.get(
-            "uploaderSubscriberCount"
-        )
-        or 0
-    )
+    sub_count = piped.get("uploaderSubscriberCount") or 0
 
     return {
         "videoId": video_id,
-        "title": piped.get(
-            "title",
-            "",
-        ),
-        "author": piped.get(
-            "uploader",
-            "",
-        ) or "",
+        "title": piped.get("title", ""),
+        "author": piped.get("uploader", "") or "",
         "authorId": author_id,
         "authorIcon": avatar,
         "authorThumbnails": author_thumbnails,
         "subCount": sub_count,
-        "subCountText": _format_sub_count(
-            sub_count
-        ),
-        "viewCount": piped.get(
-            "views",
-            0,
-        ) or 0,
-        "likeCount": piped.get(
-            "likes",
-            0,
-        ) or 0,
-        "publishedText": _piped_date_to_relative(
-            piped.get(
-                "uploadDate",
-                "",
-            )
-        ),
-        "description": piped.get(
-            "description",
-            "",
-        ) or "",
-        "descriptionHtml": (
-            str(
-                piped.get(
-                    "description",
-                    "",
-                )
-                or ""
-            )
-            .replace(
-                "\n",
-                "<br>",
-            )
-        ),
-        "lengthSeconds": piped.get(
-            "duration",
-            0,
-        ) or 0,
+        "subCountText": _format_sub_count(sub_count),
+        "viewCount": piped.get("views", 0) or 0,
+        "likeCount": piped.get("likes", 0) or 0,
+        "publishedText": _piped_date_to_relative(piped.get("uploadDate", "") or ""),
+        "description": piped.get("description", "") or "",
+        "descriptionHtml": str(piped.get("description", "") or "").replace("\n", "<br>"),
+        "lengthSeconds": piped.get("duration", 0) or 0,
         "recommendedVideos": recommended,
         "thumbnail": thumbnail,
         "_source": "piped",
     }
 
 
-_SIA_BASE_URL = os.environ.get(
-    "SIA_API_BASE",
-    "https://siatube.com",
-)
+_SIA_BASE_URL = os.environ.get("SIA_API_BASE", "https://siatube.com")
 
 
-async def fetch_sia_video(
-    video_id: str,
-) -> Optional[Dict[str, Any]]:
-
+async def fetch_sia_video(video_id: str) -> Optional[Dict[str, Any]]:
     cache_key = f"sia_video:{video_id}"
 
-    cached = await _cache_get(
-        cache_key
-    )
-
+    cached = await _cache_get(cache_key)
     if cached is not None:
         return cached
 
     start = time.monotonic()
 
     try:
-
         client = await get_client()
 
         response = await client.get(
             f"{_SIA_BASE_URL}/api/video/{video_id}",
-            timeout=httpx.Timeout(
-                5.0,
-                connect=2.0,
-                read=3.0,
-            ),
-            headers={
-                "User-Agent": DEFAULT_UA,
-            },
+            timeout=httpx.Timeout(5.0, connect=2.0, read=3.0),
+            headers={"User-Agent": DEFAULT_UA},
         )
 
         if response.status_code != 200:
-            raise RuntimeError(
-                f"Sia HTTP {response.status_code}"
-            )
+            raise RuntimeError(f"Sia HTTP {response.status_code}")
 
         data = response.json()
 
         if not isinstance(data, dict):
-            raise RuntimeError(
-                "invalid Sia response"
-            )
+            raise RuntimeError("invalid Sia response")
 
-        author_info = data.get(
-            "author",
-            {},
-        )
-
-        if not isinstance(
-            author_info,
-            dict,
-        ):
+        author_info = data.get("author", {})
+        if not isinstance(author_info, dict):
             author_info = {}
 
-        author_name = (
-            author_info.get("name")
-            or data.get("uploader")
-            or ""
-        )
-
+        author_name = author_info.get("name") or data.get("uploader") or ""
         if not author_name:
-            raise RuntimeError(
-                "Sia returned no author"
-            )
+            raise RuntimeError("Sia returned no author")
 
-        author_id = (
-            author_info.get("id")
-            or ""
-        )
+        author_id = author_info.get("id") or ""
+        author_icon = author_info.get("thumbnail") or ""
+        sub_count = author_info.get("subscribers") or "非公開"
 
-        author_icon = (
-            author_info.get("thumbnail")
-            or ""
-        )
-
-        sub_count = (
-            author_info.get(
-                "subscribers"
-            )
-            or "非公開"
-        )
-
-        description = data.get(
-            "description",
-            "",
-        )
-
-        if isinstance(
-            description,
-            dict,
-        ):
-            description_text = (
-                description.get(
-                    "text",
-                    "",
-                )
-            )
+        description = data.get("description", "")
+        if isinstance(description, dict):
+            description_text = description.get("text", "")
         else:
-            description_text = str(
-                description or ""
-            )
+            description_text = str(description or "")
 
-        related = (
-            data.get(
-                "Related-videos"
-            )
-            or data.get(
-                "relatedVideos"
-            )
-            or {}
-        )
-
-        if isinstance(
-            related,
-            dict,
-        ):
-            raw_related = (
-                related.get(
-                    "relatedVideos",
-                    [],
-                )
-            )
-        elif isinstance(
-            related,
-            list,
-        ):
+        related = data.get("Related-videos") or data.get("relatedVideos") or {}
+        if isinstance(related, dict):
+            raw_related = related.get("relatedVideos", [])
+        elif isinstance(related, list):
             raw_related = related
         else:
             raw_related = []
 
         result = {
             "videoId": video_id,
-            "title": data.get(
-                "title",
-                "",
-            ),
+            "title": data.get("title", ""),
             "author": author_name,
             "authorId": author_id,
             "authorIcon": author_icon,
             "authorThumbnails": (
-                [
-                    {
-                        "url": author_icon,
-                        "width": 48,
-                        "height": 48,
-                    }
-                ]
-                if author_icon
-                else []
+                [{"url": author_icon, "width": 48, "height": 48}] if author_icon else []
             ),
-            "subCountText": str(
-                sub_count
-            ),
+            "subCountText": str(sub_count),
             "subCount": (
-                author_info.get(
-                    "subscribers",
-                    0,
-                )
-                if isinstance(
-                    author_info.get(
-                        "subscribers"
-                    ),
-                    int,
-                )
+                author_info.get("subscribers", 0)
+                if isinstance(author_info.get("subscribers"), int)
                 else 0
             ),
-            "viewCount": data.get(
-                "views",
-                0,
-            ) or 0,
-            "likeCount": data.get(
-                "likes",
-                0,
-            ) or 0,
+            "viewCount": data.get("views", 0) or 0,
+            "likeCount": data.get("likes", 0) or 0,
             "description": description_text,
-            "descriptionHtml": (
-                description_text
-                .replace(
-                    "\n",
-                    "<br>",
-                )
-            ),
-            "recommendedVideos": _process_related_videos(
-                raw_related
-            ),
-            "thumbnail": data.get(
-                "thumbnail",
-                "",
-            ),
-            "lengthSeconds": data.get(
-                "duration",
-                0,
-            ) or 0,
+            "descriptionHtml": description_text.replace("\n", "<br>"),
+            "recommendedVideos": _process_related_videos(raw_related),
+            "thumbnail": data.get("thumbnail", ""),
+            "lengthSeconds": data.get("duration", 0) or 0,
             "_source": "sia",
         }
 
-        await _cache_set(
-            cache_key,
-            result,
-            CACHE_CONFIG["video_info"],
-        )
-
-        await record_api_performance(
-            "sia",
-            True,
-            time.monotonic() - start,
-        )
-
+        await _cache_set(cache_key, result, CACHE_CONFIG["video_info"])
+        await record_api_performance("sia", True, time.monotonic() - start)
         return result
 
     except Exception as exc:
-
-        logger.debug(
-            "Sia video error %s: %s",
-            video_id,
-            exc,
-        )
-
-        await record_api_performance(
-            "sia",
-            False,
-            time.monotonic() - start,
-        )
-
+        logger.debug("Sia video error %s: %s", video_id, exc)
+        await record_api_performance("sia", False, time.monotonic() - start)
         return None
 
 
@@ -1251,394 +941,150 @@ _SENNIN_BASE_URL = os.environ.get(
 )
 
 
-def normalize_sennin_video_info(
-    data: Dict[str, Any],
-) -> Dict[str, Any]:
-
-    if not isinstance(
-        data,
-        dict,
-    ):
+def normalize_sennin_video_info(data: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(data, dict):
         return {}
 
-    author_info = data.get(
-        "author",
-        {},
-    )
-
-    if not isinstance(
-        author_info,
-        dict,
-    ):
+    author_info = data.get("author", {})
+    if not isinstance(author_info, dict):
         author_info = {}
 
-    author_name = (
-        author_info.get(
-            "name"
-        )
-        or ""
-    )
+    author_name = author_info.get("name") or ""
+    author_id = author_info.get("id") or ""
+    author_icon = author_info.get("thumbnail") or ""
+    sub_count = author_info.get("subscribers") or "非公開"
 
-    author_id = (
-        author_info.get(
-            "id"
-        )
-        or ""
-    )
+    description = data.get("description", "")
 
-    author_icon = (
-        author_info.get(
-            "thumbnail"
-        )
-        or ""
-    )
-
-    sub_count = (
-        author_info.get(
-            "subscribers"
-        )
-        or "非公開"
-    )
-
-    description = data.get(
-        "description",
-        "",
-    )
-
-    if isinstance(
-        description,
-        dict,
-    ):
-
-        description_text = (
-            description.get(
-                "text",
-                "",
-            )
-        )
-
-        description_html = (
-            description.get(
-                "formatted"
-            )
-            or description_text.replace(
-                "\n",
-                "<br>",
-            )
-        )
-
+    if isinstance(description, dict):
+        description_text = description.get("text", "")
+        description_html = description.get("formatted") or description_text.replace("\n", "<br>")
     else:
+        description_text = str(description or "")
+        description_html = description_text.replace("\n", "<br>")
 
-        description_text = str(
-            description or ""
-        )
-
-        description_html = (
-            description_text.replace(
-                "\n",
-                "<br>",
-            )
-        )
-
-    related = data.get(
-        "Related-videos",
-        {},
-    )
-
-    if isinstance(
-        related,
-        dict,
-    ):
-        raw_related = related.get(
-            "relatedVideos",
-            [],
-        )
+    related = data.get("Related-videos", {})
+    if isinstance(related, dict):
+        raw_related = related.get("relatedVideos", [])
     else:
         raw_related = []
 
     return {
-        "videoId": data.get(
-            "videoId",
-            "",
-        ),
-        "title": data.get(
-            "title",
-            "",
-        ),
+        "videoId": data.get("videoId", ""),
+        "title": data.get("title", ""),
         "author": author_name,
         "authorId": author_id,
         "authorIcon": author_icon,
         "authorThumbnails": (
-            [
-                {
-                    "url": author_icon,
-                    "width": 48,
-                    "height": 48,
-                }
-            ]
-            if author_icon
-            else []
+            [{"url": author_icon, "width": 48, "height": 48}] if author_icon else []
         ),
-        "subCountText": str(
-            sub_count
-        ),
-        "subCount": (
-            sub_count
-            if isinstance(
-                sub_count,
-                int,
-            )
-            else 0
-        ),
+        "subCountText": str(sub_count),
+        "subCount": sub_count if isinstance(sub_count, int) else 0,
         "viewCount": (
-            data.get(
-                "views"
-            )
-            or data.get(
-                "extended_stats",
-                {},
-            ).get(
-                "views_original",
-                0,
-            )
+            data.get("views")
+            or (data.get("extended_stats", {}) or {}).get("views_original", 0)
         ),
-        "likeCount": data.get(
-            "likes",
-            0,
-        ),
+        "likeCount": data.get("likes", 0),
         "description": description_text,
         "descriptionHtml": description_html,
-        "recommendedVideos": _process_related_videos(
-            raw_related
-        ),
-        "thumbnail": data.get(
-            "thumbnail",
-            "",
-        ),
-        "lengthSeconds": data.get(
-            "duration",
-            0,
-        ) or 0,
+        "recommendedVideos": _process_related_videos(raw_related),
+        "thumbnail": data.get("thumbnail", ""),
+        "lengthSeconds": data.get("duration", 0) or 0,
         "_source": "sennin",
     }
 
 
-async def fetch_sennin_video_info(
-    video_id: str,
-) -> Optional[Dict[str, Any]]:
+async def fetch_sennin_video_info(video_id: str) -> Optional[Dict[str, Any]]:
+    cache_key = f"sennin_video:{video_id}"
 
-    cache_key = (
-        f"sennin_video:{video_id}"
-    )
-
-    cached = await _cache_get(
-        cache_key
-    )
-
+    cached = await _cache_get(cache_key)
     if cached is not None:
         return cached
 
     start = time.monotonic()
 
     try:
-
         client = await get_client()
 
         response = await client.get(
             f"{_SENNIN_BASE_URL}/api/video/{video_id}",
-            timeout=httpx.Timeout(
-                4.0,
-                connect=1.5,
-                read=2.5,
-            ),
-            headers={
-                "User-Agent": DEFAULT_UA,
-            },
+            timeout=httpx.Timeout(4.0, connect=1.5, read=2.5),
+            headers={"User-Agent": DEFAULT_UA},
         )
 
         if response.status_code != 200:
-            raise RuntimeError(
-                f"Sennin HTTP {response.status_code}"
-            )
+            raise RuntimeError(f"Sennin HTTP {response.status_code}")
 
         data = response.json()
 
-        if not isinstance(
-            data,
-            dict,
-        ):
-            raise RuntimeError(
-                "invalid Sennin response"
-            )
+        if not isinstance(data, dict):
+            raise RuntimeError("invalid Sennin response")
 
         if data.get("unavailable"):
-            raise RuntimeError(
-                "video unavailable"
-            )
+            raise RuntimeError("video unavailable")
 
-        result = normalize_sennin_video_info(
-            data
-        )
+        result = normalize_sennin_video_info(data)
 
-        if not result.get(
-            "title"
-        ):
-            raise RuntimeError(
-                "Sennin returned no title"
-            )
+        if not result.get("title"):
+            raise RuntimeError("Sennin returned no title")
 
         result["api_used"] = "sennin"
 
-        await _cache_set(
-            cache_key,
-            result,
-            CACHE_CONFIG["video_info"],
-        )
-
-        await record_api_performance(
-            "sennin",
-            True,
-            time.monotonic() - start,
-        )
-
+        await _cache_set(cache_key, result, CACHE_CONFIG["video_info"])
+        await record_api_performance("sennin", True, time.monotonic() - start)
         return result
 
     except Exception as exc:
-
-        logger.debug(
-            "Sennin video error %s: %s",
-            video_id,
-            exc,
-        )
-
-        await record_api_performance(
-            "sennin",
-            False,
-            time.monotonic() - start,
-        )
-
+        logger.debug("Sennin video error %s: %s", video_id, exc)
+        await record_api_performance("sennin", False, time.monotonic() - start)
         return None
 
 
-def _process_related_videos(
-    raw_rel: List[Any],
-) -> List[Dict[str, Any]]:
-
+def _process_related_videos(raw_rel: List[Any]) -> List[Dict[str, Any]]:
     recommended = []
 
-    for item in raw_rel:
-
-        if not isinstance(
-            item,
-            dict,
-        ):
+    for item in raw_rel or []:
+        if not isinstance(item, dict):
             continue
 
-        video_id = (
-            item.get("videoId")
-            or item.get("id")
-            or ""
-        )
-
+        video_id = item.get("videoId") or item.get("id") or ""
         if not video_id:
             continue
 
-        thumbnail = item.get(
-            "thumbnail",
-            "",
-        )
+        thumbnail = item.get("thumbnail", "") or ""
 
         if (
             not thumbnail
-            and isinstance(
-                item.get("thumbnails"),
-                list,
-            )
+            and isinstance(item.get("thumbnails"), list)
             and item["thumbnails"]
         ):
-
             first = item["thumbnails"][0]
-
-            if isinstance(
-                first,
-                dict,
-            ):
-                thumbnail = first.get(
-                    "url",
-                    "",
-                )
+            if isinstance(first, dict):
+                thumbnail = first.get("url", "")
 
         author = (
-            item.get(
-                "channelName"
-            )
-            or item.get(
-                "uploaderName"
-            )
-            or item.get(
-                "author"
-            )
+            item.get("channelName")
+            or item.get("uploaderName")
+            or item.get("author")
             or ""
         )
 
-        view_text = (
-            item.get(
-                "viewCountText"
-            )
-            or item.get(
-                "view_count_text"
-            )
-            or ""
-        )
+        view_text = item.get("viewCountText") or item.get("view_count_text") or ""
 
         recommended.append(
             {
                 "videoId": video_id,
                 "video_id": video_id,
-                "title": item.get(
-                    "title",
-                    "",
-                ),
+                "title": item.get("title", ""),
                 "author": author,
-                "authorId": (
-                    item.get(
-                        "authorId"
-                    )
-                    or ""
-                ),
-                "viewCount": (
-                    item.get(
-                        "viewCount",
-                        0,
-                    )
-                    or 0
-                ),
+                "authorId": item.get("authorId") or "",
+                "viewCount": item.get("viewCount", 0) or 0,
                 "view_count_text": view_text,
-                "lengthSeconds": (
-                    item.get(
-                        "lengthSeconds",
-                        0,
-                    )
-                    or 0
-                ),
-                "publishedText": (
-                    item.get(
-                        "publishedText",
-                        "",
-                    )
-                    or ""
-                ),
+                "lengthSeconds": item.get("lengthSeconds", 0) or 0,
+                "publishedText": item.get("publishedText", "") or "",
                 "thumbnail": thumbnail,
                 "videoThumbnails": (
-                    [
-                        {
-                            "url": thumbnail,
-                            "width": 320,
-                            "height": 180,
-                        }
-                    ]
-                    if thumbnail
-                    else []
+                    [{"url": thumbnail, "width": 320, "height": 180}] if thumbnail else []
                 ),
             }
         )
@@ -1650,69 +1096,32 @@ async def fetch_video_info_invidious_robust(
     video_id: str,
     force_instance: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
-
     start = time.monotonic()
 
     try:
-
         result = await proxy_parallel(
             "video",
             f"/api/v1/videos/{video_id}",
-            override_instances=(
-                [force_instance]
-                if force_instance
-                else None
-            ),
+            override_instances=([force_instance] if force_instance else None),
             prefer_valid_stream=False,
         )
 
-        data = (
-            result.get("data")
-            if isinstance(
-                result,
-                dict,
-            )
-            else None
-        )
+        data = result.get("data") if isinstance(result, dict) else None
 
         if (
-            isinstance(
-                data,
-                dict,
-            )
+            isinstance(data, dict)
             and not data.get("error")
-            and (
-                data.get("title")
-                or data.get("videoId")
-            )
+            and (data.get("title") or data.get("videoId"))
         ):
-
             data = dict(data)
-
             data["api_used"] = "invidious"
-
-            await record_api_performance(
-                "invidious",
-                True,
-                time.monotonic() - start,
-            )
-
+            await record_api_performance("invidious", True, time.monotonic() - start)
             return data
 
     except Exception as exc:
+        logger.debug("Invidious video error %s: %s", video_id, exc)
 
-        logger.debug(
-            "Invidious video error %s: %s",
-            video_id,
-            exc,
-        )
-
-    await record_api_performance(
-        "invidious",
-        False,
-        time.monotonic() - start,
-    )
-
+    await record_api_performance("invidious", False, time.monotonic() - start)
     return None
 
 
@@ -1721,75 +1130,34 @@ async def fetch_video_info(
     force_instance: Optional[str] = None,
     api: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
+    cache_key = f"video_info:{video_id}:{force_instance or ''}:{api or 'auto'}"
 
-    cache_key = (
-        f"video_info:"
-        f"{video_id}:"
-        f"{force_instance or ''}:"
-        f"{api or 'auto'}"
-    )
-
-    cached = await _cache_get(
-        cache_key
-    )
-
+    cached = await _cache_get(cache_key)
     if cached is not None:
         return cached
 
     if api == "invidious":
-
-        result = await fetch_video_info_invidious_robust(
-            video_id,
-            force_instance,
-        )
+        result = await fetch_video_info_invidious_robust(video_id, force_instance)
 
     elif api == "piped":
-
-        data = await _fetch_piped_data(
-            video_id
-        )
-
-        result = (
-            _piped_to_video_info(
-                data,
-                video_id,
-            )
-            if data
-            else None
-        )
-
+        data = await _fetch_piped_data(video_id)
+        result = _piped_to_video_info(data, video_id) if data else None
         if result:
             result["api_used"] = "piped"
 
     elif api == "sia":
-
-        result = await fetch_sia_video(
-            video_id
-        )
-
+        result = await fetch_sia_video(video_id)
         if result:
             result["api_used"] = "sia"
 
     elif api == "sennin":
-
-        result = await fetch_sennin_video_info(
-            video_id
-        )
+        result = await fetch_sennin_video_info(video_id)
 
     else:
-
-        result = await _fetch_video_info_fastest(
-            video_id,
-            force_instance,
-        )
+        result = await _fetch_video_info_fastest(video_id, force_instance)
 
     if result:
-
-        await _cache_set(
-            cache_key,
-            result,
-            CACHE_CONFIG["video_info"],
-        )
+        await _cache_set(cache_key, result, CACHE_CONFIG["video_info"])
 
     return result
 
@@ -1798,177 +1166,79 @@ async def _fetch_video_info_fastest(
     video_id: str,
     force_instance: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
-
     tasks = [
-        asyncio.create_task(
-            fetch_video_info_invidious_robust(
-                video_id,
-                force_instance,
-            )
-        ),
-        asyncio.create_task(
-            _fetch_piped_info_wrapper(
-                video_id
-            )
-        ),
-        asyncio.create_task(
-            fetch_sia_video(
-                video_id
-            )
-        ),
-        asyncio.create_task(
-            fetch_sennin_video_info(
-                video_id
-            )
-        ),
+        asyncio.create_task(fetch_video_info_invidious_robust(video_id, force_instance)),
+        asyncio.create_task(_fetch_piped_info_wrapper(video_id)),
+        asyncio.create_task(fetch_sia_video(video_id)),
+        asyncio.create_task(fetch_sennin_video_info(video_id)),
     ]
 
     try:
-
-        for task in asyncio.as_completed(
-            tasks,
-            timeout=7.0,
-        ):
-
+        for task in asyncio.as_completed(tasks, timeout=15.0):
             try:
-
                 result = await task
-
-                if (
-                    isinstance(
-                        result,
-                        dict,
-                    )
-                    and result.get("title")
-                ):
-
+                if isinstance(result, dict) and result.get("title"):
                     return result
-
+            except asyncio.CancelledError:
+                raise
             except Exception as exc:
-
-                logger.debug(
-                    "Video info task error: %s",
-                    exc,
-                )
+                logger.debug("Video info task error: %s", exc)
 
     except asyncio.TimeoutError:
-
-        logger.debug(
-            "Video info fastest timeout: %s",
-            video_id,
-        )
+        logger.debug("Video info fastest timeout: %s", video_id)
 
     finally:
-
         for task in tasks:
-
             if not task.done():
                 task.cancel()
-
-        await asyncio.gather(
-            *tasks,
-            return_exceptions=True,
-        )
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     return None
 
 
-async def _fetch_piped_info_wrapper(
-    video_id: str,
-) -> Optional[Dict[str, Any]]:
-
-    data = await _fetch_piped_data(
-        video_id
-    )
-
+async def _fetch_piped_info_wrapper(video_id: str) -> Optional[Dict[str, Any]]:
+    data = await _fetch_piped_data(video_id)
     if not data:
         return None
 
-    result = _piped_to_video_info(
-        data,
-        video_id,
-    )
-
+    result = _piped_to_video_info(data, video_id)
     result["api_used"] = "piped"
-
-    await record_api_performance(
-        "piped",
-        True,
-        0.0,
-    )
-
+    await record_api_performance("piped", True, 0.0)
     return result
 
 
-def _codec_name(
-    mime: str,
-) -> Tuple[str, str]:
-
+def _codec_name(mime: str) -> Tuple[str, str]:
     mime = mime or ""
-
     container = "mp4"
 
     if "webm" in mime:
         container = "webm"
-
     elif "audio/mp4" in mime:
         container = "m4a"
 
     codecs = ""
-
-    match = re.search(
-        r'codecs=["\']([^"\']+)',
-        mime,
-    )
-
+    match = re.search(r'codecs=["\']([^"\']+)', mime)
     if match:
-        codecs = (
-            match.group(1)
-            .split(",")[0]
-            .strip()
-            .lower()
-        )
+        codecs = match.group(1).split(",")[0].strip().lower()
 
-    if codecs.startswith("avc1"):
+    if codecs.startswith("avc1") or codecs == "h264":
         encoding = "H.264"
-
-    elif codecs in (
-        "h264",
-        ):
-        encoding = "H.264"
-
-    elif codecs.startswith("vp09"):
+    elif codecs.startswith("vp09") or codecs == "vp9":
         encoding = "VP9"
-
-    elif codecs == "vp9":
-        encoding = "VP9"
-
-    elif codecs.startswith("av01"):
+    elif codecs.startswith("av01") or codecs == "av1":
         encoding = "AV1"
-
-    elif codecs == "av1":
-        encoding = "AV1"
-
     elif codecs.startswith("mp4a"):
         encoding = "AAC"
-
     elif codecs == "opus":
         encoding = "Opus"
-
     else:
         encoding = codecs
 
     return container, encoding
 
 
-def _normalize_invidious_streams(
-    data: Dict[str, Any],
-) -> Dict[str, List]:
-
-    if not isinstance(
-        data,
-        dict,
-    ):
+def _normalize_invidious_streams(data: Dict[str, Any]) -> Dict[str, List]:
+    if not isinstance(data, dict):
         return {
             "streamUrls": [],
             "videoUrls": [],
@@ -1979,184 +1249,80 @@ def _normalize_invidious_streams(
     format_streams = []
     adaptive_formats = []
 
-    for fmt in (
-        data.get("formatStreams")
-        or []
-    ):
-
-        if not isinstance(
-            fmt,
-            dict,
-        ):
+    for fmt in (data.get("formatStreams") or []):
+        if not isinstance(fmt, dict):
             continue
-
-        url = fmt.get(
-            "url",
-            "",
-        )
-
+        url = fmt.get("url", "")
         if not url:
             continue
 
-        mime = fmt.get(
-            "type",
-            fmt.get(
-                "mimeType",
-                "",
-            ),
-        )
-
-        container, encoding = _codec_name(
-            mime
-        )
+        mime = fmt.get("type", fmt.get("mimeType", ""))
+        container, encoding = _codec_name(mime)
 
         format_streams.append(
             {
                 "url": url,
-                "itag": str(
-                    fmt.get(
-                        "itag",
-                        "",
-                    )
-                ),
+                "itag": str(fmt.get("itag", "")),
                 "type": mime,
-                "quality": fmt.get(
-                    "quality",
-                    "",
-                ),
-                "qualityLabel": fmt.get(
-                    "qualityLabel",
-                    fmt.get(
-                        "quality",
-                        "",
-                    ),
-                ),
-                "fps": fmt.get(
-                    "fps",
-                    30,
-                ),
+                "quality": fmt.get("quality", ""),
+                "qualityLabel": fmt.get("qualityLabel", fmt.get("quality", "")),
+                "fps": fmt.get("fps", 30),
                 "size": (
                     f"{fmt.get('width')}x{fmt.get('height')}"
-                    if fmt.get("width")
-                    and fmt.get("height")
+                    if fmt.get("width") and fmt.get("height")
                     else ""
                 ),
-                "bitrate": str(
-                    fmt.get(
-                        "bitrate",
-                        0,
-                    )
-                ),
+                "bitrate": str(fmt.get("bitrate", 0)),
                 "container": container,
                 "encoding": encoding,
             }
         )
 
-    for fmt in (
-        data.get("adaptiveFormats")
-        or []
-    ):
-
-        if not isinstance(
-            fmt,
-            dict,
-        ):
+    for fmt in (data.get("adaptiveFormats") or []):
+        if not isinstance(fmt, dict):
             continue
-
-        url = fmt.get(
-            "url",
-            "",
-        )
-
+        url = fmt.get("url", "")
         if not url:
             continue
 
-        mime = fmt.get(
-            "type",
-            fmt.get(
-                "mimeType",
-                "",
-            ),
-        )
-
-        container, encoding = _codec_name(
-            mime
-        )
+        mime = fmt.get("type", fmt.get("mimeType", ""))
+        container, encoding = _codec_name(mime)
 
         adaptive_formats.append(
             {
                 "url": url,
-                "itag": str(
-                    fmt.get(
-                        "itag",
-                        "",
-                    )
-                ),
+                "itag": str(fmt.get("itag", "")),
                 "type": mime,
-                "quality": fmt.get(
-                    "quality",
-                    "",
-                ),
-                "qualityLabel": fmt.get(
-                    "qualityLabel",
-                    "",
-                ),
-                "fps": fmt.get(
-                    "fps",
-                    0,
-                ),
+                "quality": fmt.get("quality", ""),
+                "qualityLabel": fmt.get("qualityLabel", ""),
+                "fps": fmt.get("fps", 0),
                 "size": (
                     f"{fmt.get('width')}x{fmt.get('height')}"
-                    if fmt.get("width")
-                    and fmt.get("height")
+                    if fmt.get("width") and fmt.get("height")
                     else ""
                 ),
-                "bitrate": str(
-                    fmt.get(
-                        "bitrate",
-                        0,
-                    )
-                ),
+                "bitrate": str(fmt.get("bitrate", 0)),
                 "container": container,
                 "encoding": encoding,
             }
         )
 
-    video_urls = [
-        item["url"]
-        for item in format_streams
-        if item.get("url")
-    ]
+    video_urls = [item["url"] for item in format_streams if item.get("url")]
 
     if not video_urls:
-
         video_urls = [
             item["url"]
             for item in adaptive_formats
-            if (
-                "video"
-                in str(
-                    item.get(
-                        "type",
-                        "",
-                    )
-                )
-                and item.get("url")
-            )
+            if "video" in str(item.get("type", "")) and item.get("url")
         ]
 
     stream_urls = []
 
     for fmt in format_streams:
-
         stream_urls.append(
             {
-                "url": fmt.get(
-                    "url"
-                ),
-                "resolution": fmt.get(
-                    "qualityLabel"
-                ),
+                "url": fmt.get("url"),
+                "resolution": fmt.get("qualityLabel"),
                 "format": "mp4/mixed",
                 "audioUrl": "",
             }
@@ -2165,65 +1331,23 @@ def _normalize_invidious_streams(
     audio_url = None
 
     for fmt in adaptive_formats:
-
-        mime = str(
-            fmt.get(
-                "type",
-                "",
-            )
-        )
-
-        if (
-            "audio" in mime
-            and fmt.get(
-                "url"
-            )
-        ):
-
-            if (
-                fmt.get(
-                    "language"
-                )
-                == "ja"
-            ):
-                audio_url = fmt.get(
-                    "url"
-                )
+        mime = str(fmt.get("type", ""))
+        if "audio" in mime and fmt.get("url"):
+            if fmt.get("language") == "ja":
+                audio_url = fmt.get("url")
                 break
-
             if audio_url is None:
-                audio_url = fmt.get(
-                    "url"
-                )
+                audio_url = fmt.get("url")
 
     for fmt in adaptive_formats:
-
-        mime = str(
-            fmt.get(
-                "type",
-                "",
-            )
-        )
-
-        if (
-            "video" in mime
-            and fmt.get("url")
-        ):
-
+        mime = str(fmt.get("type", ""))
+        if "video" in mime and fmt.get("url"):
             stream_urls.append(
                 {
-                    "url": fmt.get(
-                        "url"
-                    ),
-                    "resolution": fmt.get(
-                        "qualityLabel"
-                    ),
-                    "format": (
-                        f"{fmt.get('container', 'mp4')}/videoOnly"
-                    ),
-                    "audioUrl": (
-                        audio_url or ""
-                    ),
+                    "url": fmt.get("url"),
+                    "resolution": fmt.get("qualityLabel"),
+                    "format": f"{fmt.get('container', 'mp4')}/videoOnly",
+                    "audioUrl": audio_url or "",
                 }
             )
 
@@ -2235,213 +1359,96 @@ def _normalize_invidious_streams(
     }
 
 
-def _piped_stream_result(
-    data: Dict[str, Any],
-) -> Dict[str, Any]:
+def _normalize_codec(codec: str) -> str:
+    codec = str(codec or "").lower()
 
+    if codec.startswith("avc1") or codec == "h264":
+        return "H.264"
+    if codec.startswith("vp09") or codec == "vp9":
+        return "VP9"
+    if codec.startswith("av01") or codec == "av1":
+        return "AV1"
+    if codec.startswith("mp4a"):
+        return "AAC"
+    if codec == "opus":
+        return "Opus"
+
+    return codec
+
+
+def _piped_stream_result(data: Dict[str, Any]) -> Dict[str, Any]:
     format_streams = []
     adaptive_formats = []
 
     combined_url = None
-    hls_url = (
-        data.get("hls")
-        or None
-    )
+    hls_url = data.get("hls") or None
 
-    video_streams = (
-        data.get("videoStreams")
-        or []
-    )
+    video_streams = data.get("videoStreams") or []
 
     for stream in video_streams:
-
-        if not isinstance(
-            stream,
-            dict,
-        ):
+        if not isinstance(stream, dict):
             continue
 
-        url = stream.get(
-            "url",
-            "",
-        )
-
+        url = stream.get("url", "")
         if not url:
             continue
 
-        fmt = str(
-            stream.get(
-                "format",
-                "mp4",
-            )
-        ).lower()
+        fmt = str(stream.get("format", "mp4")).lower()
+        video_only = stream.get("videoOnly", True)
+        quality = stream.get("quality", "")
+        width = stream.get("width", 0)
+        height = stream.get("height", 0)
 
-        video_only = stream.get(
-            "videoOnly",
-            True,
-        )
-
-        quality = stream.get(
-            "quality",
-            "",
-        )
-
-        width = stream.get(
-            "width",
-            0,
-        )
-
-        height = stream.get(
-            "height",
-            0,
-        )
-
-        codec = (
-            stream.get(
-                "videoCodec"
-            )
-            or stream.get(
-                "vcodec"
-            )
-            or ""
-        )
-
-        encoding = _normalize_codec(
-            codec
-        )
+        codec = stream.get("videoCodec") or stream.get("vcodec") or ""
+        encoding = _normalize_codec(codec)
 
         item = {
             "url": url,
-            "itag": str(
-                stream.get(
-                    "formatId",
-                    "",
-                )
-            ),
-            "type": (
-                f"video/{fmt}"
-            ),
+            "itag": str(stream.get("formatId", "")),
+            "type": f"video/{fmt}",
             "quality": quality,
             "qualityLabel": quality,
-            "fps": stream.get(
-                "fps",
-                30,
-            ) or 30,
-            "size": (
-                f"{width}x{height}"
-                if width and height
-                else ""
-            ),
-            "bitrate": str(
-                int(
-                    stream.get(
-                        "bitrate",
-                        stream.get(
-                            "tbr",
-                            0,
-                        ),
-                    )
-                    or 0
-                )
-            ),
+            "fps": stream.get("fps", 30) or 30,
+            "size": (f"{width}x{height}" if width and height else ""),
+            "bitrate": str(int(stream.get("bitrate", stream.get("tbr", 0)) or 0)),
             "container": fmt,
             "encoding": encoding,
         }
 
         if not video_only:
-
             if combined_url is None:
                 combined_url = url
-
-            format_streams.append(
-                item
-            )
-
+            format_streams.append(item)
         else:
+            adaptive_formats.append(item)
 
-            adaptive_formats.append(
-                item
-            )
-
-    for stream in (
-        data.get("audioStreams")
-        or []
-    ):
-
-        if not isinstance(
-            stream,
-            dict,
-        ):
+    for stream in (data.get("audioStreams") or []):
+        if not isinstance(stream, dict):
             continue
 
-        url = stream.get(
-            "url",
-            "",
-        )
-
+        url = stream.get("url", "")
         if not url:
             continue
 
-        fmt = str(
-            stream.get(
-                "format",
-                "webm",
-            )
-        ).lower()
-
-        codec = (
-            stream.get(
-                "audioCodec"
-            )
-            or stream.get(
-                "acodec"
-            )
-            or ""
-        )
+        fmt = str(stream.get("format", "webm")).lower()
+        codec = stream.get("audioCodec") or stream.get("acodec") or ""
 
         adaptive_formats.append(
             {
                 "url": url,
-                "itag": str(
-                    stream.get(
-                        "formatId",
-                        "",
-                    )
-                ),
-                "type": (
-                    f"audio/{fmt}"
-                ),
-                "quality": stream.get(
-                    "quality",
-                    "",
-                ),
+                "itag": str(stream.get("formatId", "")),
+                "type": f"audio/{fmt}",
+                "quality": stream.get("quality", ""),
                 "qualityLabel": "",
                 "fps": 0,
                 "size": "",
-                "bitrate": str(
-                    int(
-                        stream.get(
-                            "bitrate",
-                            stream.get(
-                                "tbr",
-                                0,
-                            ),
-                        )
-                        or 0
-                    )
-                ),
+                "bitrate": str(int(stream.get("bitrate", stream.get("tbr", 0)) or 0)),
                 "container": fmt,
-                "encoding": _normalize_codec(
-                    codec
-                ),
+                "encoding": _normalize_codec(codec),
             }
         )
 
-    if (
-        not format_streams
-        and hls_url
-    ):
-
+    if not format_streams and hls_url:
         format_streams.append(
             {
                 "url": hls_url,
@@ -2461,45 +1468,19 @@ def _piped_stream_result(
     fallback_url = None
 
     for stream in video_streams:
-
-        if not isinstance(
-            stream,
-            dict,
-        ):
+        if not isinstance(stream, dict):
             continue
-
-        if (
-            "360" in str(
-                stream.get(
-                    "quality",
-                    "",
-                )
-            )
-            and stream.get(
-                "videoOnly",
-                True,
-            )
-        ):
-
-            fallback_url = stream.get(
-                "url"
-            )
-
+        if "360" in str(stream.get("quality", "")) and stream.get("videoOnly", True):
+            fallback_url = stream.get("url")
             if fallback_url:
                 break
 
     if not format_streams:
-
         if combined_url:
-
             pass
-
         elif hls_url:
-
             pass
-
         elif fallback_url:
-
             format_streams.append(
                 {
                     "url": fallback_url,
@@ -2515,44 +1496,23 @@ def _piped_stream_result(
                 }
             )
 
-    video_urls = [
-        item.get("url")
-        for item in format_streams
-        if item.get("url")
-    ]
+    video_urls = [item.get("url") for item in format_streams if item.get("url")]
 
     if not video_urls:
-
         video_urls = [
             item.get("url")
             for item in adaptive_formats
-            if (
-                item.get("url")
-                and "video"
-                in str(
-                    item.get(
-                        "type",
-                        "",
-                    )
-                )
-            )
+            if item.get("url") and "video" in str(item.get("type", ""))
         ]
 
     stream_urls = []
 
     for item in format_streams:
-
         stream_urls.append(
             {
-                "url": item.get(
-                    "url"
-                ),
-                "resolution": item.get(
-                    "qualityLabel"
-                ),
-                "format": (
-                    f"{item.get('container', 'mp4')}/mixed"
-                ),
+                "url": item.get("url"),
+                "resolution": item.get("qualityLabel"),
+                "format": f"{item.get('container', 'mp4')}/mixed",
                 "audioUrl": "",
             }
         )
@@ -2568,163 +1528,64 @@ def _piped_stream_result(
     }
 
 
-def _normalize_codec(
-    codec: str,
-) -> str:
-
-    codec = str(
-        codec or ""
-    ).lower()
-
-    if (
-        codec.startswith("avc1")
-        or codec == "h264"
-    ):
-        return "H.264"
-
-    if (
-        codec.startswith("vp09")
-        or codec == "vp9"
-    ):
-        return "VP9"
-
-    if (
-        codec.startswith("av01")
-        or codec == "av1"
-    ):
-        return "AV1"
-
-    if codec.startswith("mp4a"):
-        return "AAC"
-
-    if codec == "opus":
-        return "Opus"
-
-    return codec
-
-
 async def _fetch_invidious_streams(
     video_id: str,
     force_instance: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
-
     start = time.monotonic()
 
     try:
-
         result = await proxy_parallel(
             "video",
             f"/api/v1/videos/{video_id}",
-            override_instances=(
-                [force_instance]
-                if force_instance
-                else None
-            ),
+            override_instances=([force_instance] if force_instance else None),
             prefer_valid_stream=True,
         )
 
-        data = (
-            result.get("data")
-            if isinstance(
-                result,
-                dict,
-            )
-            else None
-        )
+        data = result.get("data") if isinstance(result, dict) else None
 
-        if not isinstance(
-            data,
-            dict,
-        ):
-            raise RuntimeError(
-                "invalid Invidious stream data"
-            )
+        if not isinstance(data, dict):
+            raise RuntimeError("invalid Invidious stream data")
 
-        normalized = _normalize_invidious_streams(
-            data
-        )
+        normalized = _normalize_invidious_streams(data)
 
-        if (
-            not normalized["streamUrls"]
-            and not normalized["videoUrls"]
-        ):
-            raise RuntimeError(
-                "empty Invidious streams"
-            )
+        if not normalized["streamUrls"] and not normalized["videoUrls"]:
+            raise RuntimeError("empty Invidious streams")
 
-        normalized[
-            "stream_api_used"
-        ] = "invidious"
+        normalized["stream_api_used"] = "invidious"
 
-        await record_api_performance(
-            "invidious",
-            True,
-            time.monotonic() - start,
-        )
-
+        await record_api_performance("invidious", True, time.monotonic() - start)
         return normalized
 
     except Exception as exc:
-
-        logger.debug(
-            "Invidious stream error %s: %s",
-            video_id,
-            exc,
-        )
-
-        await record_api_performance(
-            "invidious",
-            False,
-            time.monotonic() - start,
-        )
-
+        logger.debug("Invidious stream error %s: %s", video_id, exc)
+        await record_api_performance("invidious", False, time.monotonic() - start)
         return None
 
 
-async def _fetch_piped_streams(
-    video_id: str,
-) -> Optional[Dict[str, Any]]:
-
+async def _fetch_piped_streams(video_id: str) -> Optional[Dict[str, Any]]:
     start = time.monotonic()
 
-    data = await _fetch_piped_data(
-        video_id
-    )
+    data = await _fetch_piped_data(video_id)
 
     if not data:
-        await record_api_performance(
-            "piped",
-            False,
-            time.monotonic() - start,
-        )
+        await record_api_performance("piped", False, time.monotonic() - start)
         return None
 
-    result = _piped_stream_result(
-        data
-    )
+    result = _piped_stream_result(data)
+    result["instance"] = data.get("_piped_instance", "")
 
     if (
         not result["streamUrls"]
         and not result["videoUrls"]
         and not result.get("hls_url")
     ):
-
-        await record_api_performance(
-            "piped",
-            False,
-            time.monotonic() - start,
-        )
-
+        await record_api_performance("piped", False, time.monotonic() - start)
         return None
 
     result["stream_api_used"] = "piped"
 
-    await record_api_performance(
-        "piped",
-        True,
-        time.monotonic() - start,
-    )
-
+    await record_api_performance("piped", True, time.monotonic() - start)
     return result
 
 
@@ -2733,59 +1594,23 @@ async def fetch_fastest_stream_urls(
     api: Optional[str] = None,
     force_instance: Optional[str] = None,
 ) -> Dict[str, Any]:
+    cache_key = f"streams:{video_id}:{force_instance or ''}:{api or 'auto'}"
 
-    cache_key = (
-        f"streams:"
-        f"{video_id}:"
-        f"{force_instance or ''}:"
-        f"{api or 'auto'}"
-    )
-
-    cached = await _cache_get(
-        cache_key
-    )
-
+    cached = await _cache_get(cache_key)
     if cached is not None:
         return cached
 
     if api == "invidious":
-
-        result = await _fetch_invidious_streams(
-            video_id,
-            force_instance,
-        )
-
+        result = await _fetch_invidious_streams(video_id, force_instance)
     elif api == "piped":
-
-        result = await _fetch_piped_streams(
-            video_id
-        )
-
-    elif api in (
-        "sia",
-        "sennin",
-    ):
-
-        result = await _fetch_api_streams(
-            video_id,
-            api,
-        )
-
+        result = await _fetch_piped_streams(video_id)
+    elif api in ("sia", "sennin"):
+        result = await _fetch_api_streams(video_id, api)
     else:
-
-        result = await _fetch_streams_fastest(
-            video_id,
-            force_instance,
-        )
+        result = await _fetch_streams_fastest(video_id, force_instance)
 
     if result:
-
-        await _cache_set(
-            cache_key,
-            result,
-            CACHE_CONFIG["streams"],
-        )
-
+        await _cache_set(cache_key, result, CACHE_CONFIG["streams"])
         return result
 
     return {
@@ -2797,145 +1622,65 @@ async def fetch_fastest_stream_urls(
     }
 
 
-async def _fetch_api_streams(
-    video_id: str,
-    api: str,
-) -> Optional[Dict[str, Any]]:
-
+async def _fetch_api_streams(video_id: str, api: str) -> Optional[Dict[str, Any]]:
     if api == "sia":
-
-        data = await _fetch_sia_data(
-            video_id
-        )
-
+        data = await _fetch_sia_data(video_id)
         if data:
-            result = _normalize_generic_api_streams(
-                data
-            )
-
+            result = _normalize_generic_api_streams(data)
             if result:
-                result[
-                    "stream_api_used"
-                ] = "sia"
-
+                result["stream_api_used"] = "sia"
                 return result
 
     if api == "sennin":
-
-        data = await _fetch_sennin_data(
-            video_id
-        )
-
+        data = await _fetch_sennin_data(video_id)
         if data:
-
-            result = _normalize_generic_api_streams(
-                data
-            )
-
+            result = _normalize_generic_api_streams(data)
             if result:
-                result[
-                    "stream_api_used"
-                ] = "sennin"
-
+                result["stream_api_used"] = "sennin"
                 return result
 
     return None
 
 
-async def _fetch_sia_data(
-    video_id: str,
-) -> Optional[Dict[str, Any]]:
-
+async def _fetch_sia_data(video_id: str) -> Optional[Dict[str, Any]]:
     try:
-
         client = await get_client()
-
         response = await client.get(
             f"{_SIA_BASE_URL}/api/video/{video_id}",
-            timeout=httpx.Timeout(
-                6.0
-            ),
-            headers={
-                "User-Agent": DEFAULT_UA,
-            },
+            timeout=httpx.Timeout(6.0),
+            headers={"User-Agent": DEFAULT_UA},
         )
-
         if response.status_code != 200:
             return None
-
         data = response.json()
-
-        return (
-            data
-            if isinstance(
-                data,
-                dict,
-            )
-            else None
-        )
-
+        return data if isinstance(data, dict) else None
     except Exception:
         return None
 
 
-async def _fetch_sennin_data(
-    video_id: str,
-) -> Optional[Dict[str, Any]]:
-
+async def _fetch_sennin_data(video_id: str) -> Optional[Dict[str, Any]]:
     try:
-
         client = await get_client()
-
         response = await client.get(
             f"{_SENNIN_BASE_URL}/api/video/{video_id}",
-            timeout=httpx.Timeout(
-                6.0
-            ),
-            headers={
-                "User-Agent": DEFAULT_UA,
-            },
+            timeout=httpx.Timeout(6.0),
+            headers={"User-Agent": DEFAULT_UA},
         )
-
         if response.status_code != 200:
             return None
-
         data = response.json()
-
-        return (
-            data
-            if isinstance(
-                data,
-                dict,
-            )
-            else None
-        )
-
+        return data if isinstance(data, dict) else None
     except Exception:
         return None
 
 
-def _normalize_generic_api_streams(
-    data: Dict[str, Any],
-) -> Optional[Dict[str, Any]]:
-
+def _normalize_generic_api_streams(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     candidates = []
 
-    for key in (
-        "formatStreams",
-        "adaptiveFormats",
-        "streams",
-        "videoStreams",
-    ):
-
+    for key in ("formatStreams", "adaptiveFormats", "streams", "videoStreams"):
         value = data.get(key)
-
-        if isinstance(
-            value,
-            list,
-        ):
-            candidates.extend(
-                value
-            )
+        if isinstance(value, list):
+            candidates.extend(value)
 
     if not candidates:
         return None
@@ -2944,19 +1689,10 @@ def _normalize_generic_api_streams(
     adaptive_formats = []
 
     for item in candidates:
-
-        if not isinstance(
-            item,
-            dict,
-        ):
+        if not isinstance(item, dict):
             continue
 
-        url = (
-            item.get("url")
-            or item.get("streamUrl")
-            or ""
-        )
-
+        url = item.get("url") or item.get("streamUrl") or ""
         if not url:
             continue
 
@@ -2967,99 +1703,43 @@ def _normalize_generic_api_streams(
             or ""
         )
 
-        ext = (
-            item.get("ext")
-            or "mp4"
-        )
-
-        codec = (
-            item.get("vcodec")
-            or item.get("videoCodec")
-            or ""
-        )
+        ext = item.get("ext") or "mp4"
+        codec = item.get("vcodec") or item.get("videoCodec") or ""
 
         normalized = {
             "url": url,
-            "itag": str(
-                item.get(
-                    "itag",
-                    item.get(
-                        "formatId",
-                        "",
-                    ),
-                )
-            ),
-            "type": (
-                f"video/{ext}"
-            ),
+            "itag": str(item.get("itag", item.get("formatId", ""))),
+            "type": f"video/{ext}",
             "quality": quality,
             "qualityLabel": quality,
-            "fps": item.get(
-                "fps",
-                30,
-            ) or 30,
+            "fps": item.get("fps", 30) or 30,
             "size": (
                 f"{item.get('width')}x{item.get('height')}"
-                if item.get("width")
-                and item.get("height")
+                if item.get("width") and item.get("height")
                 else ""
             ),
-            "bitrate": str(
-                item.get(
-                    "bitrate",
-                    item.get(
-                        "tbr",
-                        0,
-                    ),
-                )
-                or 0
-            ),
+            "bitrate": str(item.get("bitrate", item.get("tbr", 0)) or 0),
             "container": ext,
-            "encoding": _normalize_codec(
-                codec
-            ),
+            "encoding": _normalize_codec(codec),
         }
 
-        if (
-            item.get(
-                "videoOnly"
-            )
-            or item.get(
-                "type"
-            ) == "video-only"
-        ):
-
-            adaptive_formats.append(
-                normalized
-            )
-
+        if item.get("videoOnly") or item.get("type") == "video-only":
+            adaptive_formats.append(normalized)
         else:
-
-            format_streams.append(
-                normalized
-            )
+            format_streams.append(normalized)
 
     if not format_streams and not adaptive_formats:
         return None
 
     video_urls = [
-        item["url"]
-        for item in (
-            format_streams
-            + adaptive_formats
-        )
-        if item.get("url")
+        item["url"] for item in (format_streams + adaptive_formats) if item.get("url")
     ]
 
     stream_urls = [
         {
             "url": item["url"],
-            "resolution": item.get(
-                "qualityLabel"
-            ),
-            "format": (
-                f"{item.get('container', 'mp4')}/mixed"
-            ),
+            "resolution": item.get("qualityLabel"),
+            "format": f"{item.get('container', 'mp4')}/mixed",
             "audioUrl": "",
         }
         for item in format_streams
@@ -3077,495 +1757,184 @@ async def _fetch_streams_fastest(
     video_id: str,
     force_instance: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
-
     tasks = [
-        asyncio.create_task(
-            _fetch_invidious_streams(
-                video_id,
-                force_instance,
-            )
-        ),
-        asyncio.create_task(
-            _fetch_piped_streams(
-                video_id
-            )
-        ),
+        asyncio.create_task(_fetch_invidious_streams(video_id, force_instance)),
+        asyncio.create_task(_fetch_piped_streams(video_id)),
     ]
 
     try:
-
-        for task in asyncio.as_completed(
-            tasks,
-            timeout=15.0,
-        ):
-
+        for task in asyncio.as_completed(tasks, timeout=15.0):
             try:
-
                 result = await task
 
                 if not result:
                     continue
 
                 if (
-                    result.get(
-                        "streamUrls"
-                    )
-                    or result.get(
-                        "videoUrls"
-                    )
-                    or result.get(
-                        "formatStreams"
-                    )
-                    or result.get(
-                        "adaptiveFormats"
-                    )
+                    result.get("streamUrls")
+                    or result.get("videoUrls")
+                    or result.get("formatStreams")
+                    or result.get("adaptiveFormats")
                 ):
-
                     return result
 
+            except asyncio.CancelledError:
+                raise
             except Exception as exc:
-
-                logger.debug(
-                    "Stream task failed: %s",
-                    exc,
-                )
+                logger.debug("Stream task failed: %s", exc)
 
     except asyncio.TimeoutError:
-
-        logger.debug(
-            "Stream fastest timeout: %s",
-            video_id,
-        )
+        logger.debug("Stream fastest timeout: %s", video_id)
 
     finally:
-
         for task in tasks:
-
             if not task.done():
                 task.cancel()
-
-        await asyncio.gather(
-            *tasks,
-            return_exceptions=True,
-        )
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     return None
 
 
-def _normalize_comment(
-    comment: Dict[str, Any],
-) -> Optional[Dict[str, Any]]:
-
-    if not isinstance(
-        comment,
-        dict,
-    ):
+def _normalize_comment(comment: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    if not isinstance(comment, dict):
         return None
 
-    item = dict(
-        comment
-    )
+    item = dict(comment)
 
-    author_obj = item.get(
-        "author"
-    )
-
+    author_obj = item.get("author")
     author_icon = ""
 
-    if isinstance(
-        author_obj,
-        dict,
-    ):
-
-        item["author"] = (
-            author_obj.get(
-                "name",
-                "",
-            )
-        )
-
+    if isinstance(author_obj, dict):
+        item["author"] = author_obj.get("name", "")
         author_icon = (
-            author_obj.get(
-                "avatar"
-            )
-            or author_obj.get(
-                "authorIcon"
-            )
-            or item.get(
-                "avatar",
-                "",
-            )
+            author_obj.get("avatar")
+            or author_obj.get("authorIcon")
+            or item.get("avatar", "")
         )
-
-        item["authorId"] = (
-            author_obj.get(
-                "channelId",
-                "",
-            )
-        )
-
+        item["authorId"] = author_obj.get("channelId", "")
     else:
-
-        author_thumbs = item.get(
-            "authorThumbnails",
-            [],
-        )
-
-        if (
-            isinstance(
-                author_thumbs,
-                list,
-            )
-            and author_thumbs
-        ):
-
+        author_thumbs = item.get("authorThumbnails", [])
+        if isinstance(author_thumbs, list) and author_thumbs:
             last = author_thumbs[-1]
-
-            if isinstance(
-                last,
-                dict,
-            ):
-                author_icon = last.get(
-                    "url",
-                    "",
-                )
+            if isinstance(last, dict):
+                author_icon = last.get("url", "")
 
     item["authorIcon"] = (
-        author_icon
-        or item.get(
-            "authorIcon",
-            "",
-        )
-        or item.get(
-            "avatar",
-            "",
-        )
+        author_icon or item.get("authorIcon", "") or item.get("avatar", "")
     )
+    item["authorThumbnail"] = item["authorIcon"]
+    item["avatar"] = item["authorIcon"]
 
-    item["authorThumbnail"] = (
-        item["authorIcon"]
-    )
-
-    item["avatar"] = (
-        item["authorIcon"]
-    )
-
-    if not isinstance(
-        item.get(
-            "authorThumbnails"
-        ),
-        list,
-    ):
-
+    if not isinstance(item.get("authorThumbnails"), list):
         item["authorThumbnails"] = (
-            [
-                {
-                    "url": item[
-                        "authorIcon"
-                    ]
-                }
-            ]
-            if item[
-                "authorIcon"
-            ]
-            else []
+            [{"url": item["authorIcon"]}] if item["authorIcon"] else []
         )
 
-    text = (
-        item.get("text")
-        or item.get("content")
-        or ""
-    )
+    text = item.get("text") or item.get("content") or ""
 
-    item["content"] = (
-        item.get(
-            "content"
-        )
-        or text
-    )
-
-    item["text"] = (
-        item.get(
-            "text"
-        )
-        or text
-    )
-
-    item["contentHtml"] = (
-        item.get(
-            "contentHtml"
-        )
-        or text.replace(
-            "\n",
-            "<br>",
-        )
-    )
+    item["content"] = item.get("content") or text
+    item["text"] = item.get("text") or text
+    item["contentHtml"] = item.get("contentHtml") or text.replace("\n", "<br>")
 
     published = (
-        item.get(
-            "publishedTime"
-        )
-        or item.get(
-            "published"
-        )
-        or item.get(
-            "publishedText",
-            "",
-        )
+        item.get("publishedTime")
+        or item.get("published")
+        or item.get("publishedText", "")
     )
 
     item["publishedTime"] = published
     item["publishedText"] = published
 
-    likes = item.get(
-        "likes"
-    )
+    likes = item.get("likes")
 
-    if isinstance(
-        likes,
-        dict,
-    ):
-
-        item["likeCount"] = (
-            likes.get(
-                "count",
-                0,
-            )
-        )
-
+    if isinstance(likes, dict):
+        item["likeCount"] = likes.get("count", 0)
     else:
-
-        item["likeCount"] = (
-            item.get(
-                "likeCount",
-                likes or 0,
-            )
-        )
+        item["likeCount"] = item.get("likeCount", likes or 0)
 
     return item
 
 
-def process_comments(
-    comment_data: Any,
-) -> List[Dict[str, Any]]:
+def normalize_sennin_comments(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    comments = data.get("comments", [])
+    if not isinstance(comments, list):
+        return []
 
-    if isinstance(
-        comment_data,
-        Exception,
-    ):
+    result = []
+
+    for comment in comments:
+        if not isinstance(comment, dict):
+            continue
+
+        author = comment.get("author", {})
+        if not isinstance(author, dict):
+            author = {}
+
+        likes = comment.get("likes", {})
+        if not isinstance(likes, dict):
+            likes = {}
+
+        replies = comment.get("replies", {})
+        if not isinstance(replies, dict):
+            replies = {}
+
+        author_name = author.get("name") or (
+            comment.get("author") if isinstance(comment.get("author"), str) else ""
+        )
+
+        author_icon = author.get("avatar") or comment.get("authorIcon", "")
+
+        text = comment.get("text") or comment.get("content") or ""
+
+        result.append(
+            {
+                "commentId": comment.get("commentId", ""),
+                "author": author_name,
+                "authorId": author.get("channelId") or comment.get("authorId", ""),
+                "authorIcon": author_icon,
+                "authorThumbnail": author_icon,
+                "authorThumbnails": ([{"url": author_icon}] if author_icon else []),
+                "content": text,
+                "contentHtml": text.replace("\n", "<br>"),
+                "publishedTime": comment.get("publishedTime", ""),
+                "publishedText": comment.get("publishedTime", ""),
+                "likeCount": likes.get("count", 0),
+                "replyCount": replies.get("count", 0),
+                "isCreator": author.get("creator", False),
+                "isVerified": author.get("verified", False),
+            }
+        )
+
+    return result
+
+
+def process_comments(comment_data: Any) -> List[Dict[str, Any]]:
+    if isinstance(comment_data, Exception):
         return []
 
     if not comment_data:
         return []
 
-    if isinstance(
-        comment_data,
-        dict,
-    ):
-
-        if (
-            comment_data.get(
-                "success"
-            )
-            is True
-            and isinstance(
-                comment_data.get(
-                    "comments"
-                ),
-                list,
-            )
+    if isinstance(comment_data, dict):
+        if comment_data.get("success") is True and isinstance(
+            comment_data.get("comments"), list
         ):
+            return normalize_sennin_comments(comment_data)
 
-            return normalize_sennin_comments(
-                comment_data
-            )
+        comments = comment_data.get("comments", [])
 
-        comments = comment_data.get(
-            "comments",
-            [],
-        )
-
-    elif isinstance(
-        comment_data,
-        list,
-    ):
-
+    elif isinstance(comment_data, list):
         comments = comment_data
 
     else:
-
         comments = []
 
     result = []
 
     for comment in comments:
-
-        normalized = _normalize_comment(
-            comment
-        )
-
+        normalized = _normalize_comment(comment)
         if normalized:
-            result.append(
-                normalized
-            )
-
-    return result
-
-
-def normalize_sennin_comments(
-    data: Dict[str, Any],
-) -> List[Dict[str, Any]]:
-
-    comments = data.get(
-        "comments",
-        [],
-    )
-
-    if not isinstance(
-        comments,
-        list,
-    ):
-        return []
-
-    result = []
-
-    for comment in comments:
-
-        if not isinstance(
-            comment,
-            dict,
-        ):
-            continue
-
-        author = comment.get(
-            "author",
-            {},
-        )
-
-        if not isinstance(
-            author,
-            dict,
-        ):
-            author = {}
-
-        likes = comment.get(
-            "likes",
-            {},
-        )
-
-        if not isinstance(
-            likes,
-            dict,
-        ):
-            likes = {}
-
-        replies = comment.get(
-            "replies",
-            {},
-        )
-
-        if not isinstance(
-            replies,
-            dict,
-        ):
-            replies = {}
-
-        author_name = (
-            author.get(
-                "name"
-            )
-            or (
-                comment.get(
-                    "author"
-                )
-                if isinstance(
-                    comment.get(
-                        "author"
-                    ),
-                    str,
-                )
-                else ""
-            )
-        )
-
-        author_icon = (
-            author.get(
-                "avatar"
-            )
-            or comment.get(
-                "authorIcon",
-                "",
-            )
-        )
-
-        text = (
-            comment.get(
-                "text"
-            )
-            or comment.get(
-                "content"
-            )
-            or ""
-        )
-
-        result.append(
-            {
-                "commentId": comment.get(
-                    "commentId",
-                    "",
-                ),
-                "author": author_name,
-                "authorId": (
-                    author.get(
-                        "channelId"
-                    )
-                    or comment.get(
-                        "authorId",
-                        "",
-                    )
-                ),
-                "authorIcon": author_icon,
-                "authorThumbnail": author_icon,
-                "authorThumbnails": (
-                    [
-                        {
-                            "url": author_icon
-                        }
-                    ]
-                    if author_icon
-                    else []
-                ),
-                "content": text,
-                "contentHtml": text.replace(
-                    "\n",
-                    "<br>",
-                ),
-                "publishedTime": comment.get(
-                    "publishedTime",
-                    "",
-                ),
-                "publishedText": comment.get(
-                    "publishedTime",
-                    "",
-                ),
-                "likeCount": likes.get(
-                    "count",
-                    0,
-                ),
-                "replyCount": replies.get(
-                    "count",
-                    0,
-                ),
-                "isCreator": author.get(
-                    "creator",
-                    False,
-                ),
-                "isVerified": author.get(
-                    "verified",
-                    False,
-                ),
-            }
-        )
+            result.append(normalized)
 
     return result
 
@@ -3575,103 +1944,52 @@ async def fetch_comments(
     force_instance: Optional[str] = None,
     api: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
+    cache_key = f"comments:{video_id}:{force_instance or ''}:{api or 'auto'}"
 
-    cache_key = (
-        f"comments:"
-        f"{video_id}:"
-        f"{force_instance or ''}:"
-        f"{api or 'auto'}"
-    )
-
-    cached = await _cache_get(
-        cache_key
-    )
-
+    cached = await _cache_get(cache_key)
     if cached is not None:
         return cached
 
     if api == "sennin":
-
         try:
-
             client = await get_client()
 
             response = await client.get(
                 f"{_SENNIN_BASE_URL}/api/video/{video_id}",
                 timeout=5.0,
-                headers={
-                    "User-Agent": DEFAULT_UA,
-                },
+                headers={"User-Agent": DEFAULT_UA},
             )
 
             if response.status_code == 200:
-
                 data = response.json()
-
-                comments = normalize_sennin_comments(
-                    data
-                )
+                comments = normalize_sennin_comments(data)
 
                 if comments:
-
-                    await _cache_set(
-                        cache_key,
-                        comments,
-                        CACHE_CONFIG["comments"],
-                    )
-
+                    await _cache_set(cache_key, comments, CACHE_CONFIG["comments"])
                     return comments
 
         except Exception as exc:
-
-            logger.debug(
-                "Sennin comments failed: %s",
-                exc,
-            )
+            logger.debug("Sennin comments failed: %s", exc)
 
         return []
 
     try:
-
         result = await proxy_parallel(
             "comments",
             f"/api/v1/comments/{video_id}",
-            override_instances=(
-                [force_instance]
-                if force_instance
-                else None
-            ),
+            override_instances=([force_instance] if force_instance else None),
         )
 
-        data = (
-            result.get("data")
-            if isinstance(
-                result,
-                dict,
-            )
-            else result
-        )
+        data = result.get("data") if isinstance(result, dict) else result
 
-        comments = process_comments(
-            data
-        )
+        comments = process_comments(data)
 
         if comments:
-
-            await _cache_set(
-                cache_key,
-                comments,
-                CACHE_CONFIG["comments"],
-            )
-
+            await _cache_set(cache_key, comments, CACHE_CONFIG["comments"])
             return comments
 
     except Exception as exc:
-
-        logger.debug(
-            "Invidious comments failed: %s",
-            exc,
-        )
+        logger.debug("Invidious comments failed: %s", exc)
 
     return []
 
@@ -3680,59 +1998,30 @@ async def _fetch_playlist(
     playlist_id: Optional[str],
     force_instance: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
-
     if not playlist_id:
         return None
 
     try:
-
         result = await proxy_parallel(
             "playlist",
             f"/api/v1/playlists/{playlist_id}",
-            override_instances=(
-                [force_instance]
-                if force_instance
-                else None
-            ),
+            override_instances=([force_instance] if force_instance else None),
         )
 
-        data = (
-            result.get("data")
-            if isinstance(
-                result,
-                dict,
-            )
-            else None
-        )
+        data = result.get("data") if isinstance(result, dict) else None
 
-        if isinstance(
-            data,
-            dict,
-        ):
+        if isinstance(data, dict):
             return data
 
     except Exception as exc:
-
-        logger.debug(
-            "Playlist error: %s",
-            exc,
-        )
+        logger.debug("Playlist error: %s", exc)
 
     return None
 
 
-def _is_piped_proxy_url_allowed(
-    url: str,
-) -> bool:
-
-    parsed = urlparse(
-        url
-    )
-
-    hostname = (
-        parsed.hostname
-        or ""
-    ).lower()
+def _is_piped_proxy_url_allowed(url: str) -> bool:
+    parsed = urlparse(url)
+    hostname = (parsed.hostname or "").lower()
 
     allowed_exact = {
         "pipedapi.wireway.ch",
@@ -3753,201 +2042,83 @@ def _is_piped_proxy_url_allowed(
         ".ggpht.com",
     )
 
-    return hostname.endswith(
-        allowed_suffixes
-    )
+    return hostname.endswith(allowed_suffixes)
 
 
-def _rewrite_hls_manifest(
-    body: str,
-    base_url: str,
-) -> str:
-
-    from urllib.parse import urljoin
-
+def _rewrite_hls_manifest(body: str, base_url: str) -> str:
     lines = body.splitlines()
-
     output = []
 
     for line in lines:
-
         stripped = line.strip()
 
-        if (
-            not stripped
-            or stripped.startswith("#")
-        ):
+        if not stripped or stripped.startswith("#"):
+            if stripped.startswith("#EXT-X-KEY") or stripped.startswith("#EXT-X-MEDIA"):
 
-            if (
-                stripped.startswith(
-                    "#EXT-X-KEY"
-                )
-                or stripped.startswith(
-                    "#EXT-X-MEDIA"
-                )
-            ):
+                def replace_uri(match):
+                    original = match.group(1)
+                    absolute = urljoin(base_url, original)
+                    return 'URI="/proxy/piped-stream?url=' + quote(absolute) + '"'
 
-                def replace_uri(
-                    match,
-                ):
+                line = re.sub(r'URI="([^"]+)"', replace_uri, line)
 
-                    original = (
-                        match.group(1)
-                    )
-
-                    absolute = urljoin(
-                        base_url,
-                        original,
-                    )
-
-                    return (
-                        'URI="'
-                        '/proxy/piped-stream?url='
-                        + quote(
-                            absolute
-                        )
-                        + '"'
-                    )
-
-                line = re.sub(
-                    r'URI="([^"]+)"',
-                    replace_uri,
-                    line,
-                )
-
-            output.append(
-                line
-            )
-
+            output.append(line)
             continue
 
-        absolute = urljoin(
-            base_url,
-            stripped,
-        )
+        absolute = urljoin(base_url, stripped)
+        output.append("/proxy/piped-stream?url=" + quote(absolute))
 
-        output.append(
-            "/proxy/piped-stream?url="
-            + quote(
-                absolute
-            )
-        )
-
-    return (
-        "\n".join(output)
-        + "\n"
-    )
+    return "\n".join(output) + "\n"
 
 
-@router.get(
-    "/proxy/piped-stream"
-)
-async def proxy_piped_stream(
-    url: str,
-    request: Request,
-):
-
-    if not _is_piped_proxy_url_allowed(
-        url
-    ):
-
-        return JSONResponse(
-            {
-                "error": "不正なURL"
-            },
-            status_code=400,
-        )
+@router.get("/proxy/piped-stream")
+async def proxy_piped_stream(url: str, request: Request):
+    if not _is_piped_proxy_url_allowed(url):
+        return JSONResponse({"error": "不正なURL"}, status_code=400)
 
     request_headers = {}
 
-    range_header = request.headers.get(
-        "range"
-    )
-
+    range_header = request.headers.get("range")
     if range_header:
-        request_headers[
-            "Range"
-        ] = range_header
+        request_headers["Range"] = range_header
 
     client = httpx.AsyncClient(
-        timeout=httpx.Timeout(
-            connect=10.0,
-            read=90.0,
-            write=10.0,
-            pool=5.0,
-        ),
+        timeout=httpx.Timeout(connect=10.0, read=90.0, write=10.0, pool=5.0),
         follow_redirects=True,
     )
 
-    is_manifest = (
-        ".m3u8" in url
-        or "/manifest/hls_" in url
-    )
+    is_manifest = ".m3u8" in url or "/manifest/hls_" in url
 
     if is_manifest:
-
         try:
-
-            response = await client.get(
-                url,
-                headers=request_headers,
-            )
+            response = await client.get(url, headers=request_headers)
 
             content_type = response.headers.get(
-                "content-type",
-                "application/vnd.apple.mpegurl",
+                "content-type", "application/vnd.apple.mpegurl"
             )
 
-            rewritten = _rewrite_hls_manifest(
-                response.text,
-                str(response.url),
-            )
+            rewritten = _rewrite_hls_manifest(response.text, str(response.url))
 
             return PlainTextResponse(
                 rewritten,
                 status_code=response.status_code,
                 media_type=content_type,
-                headers={
-                    "cache-control": "no-cache"
-                },
+                headers={"cache-control": "no-cache"},
             )
 
         except Exception as exc:
-
-            return JSONResponse(
-                {
-                    "error": str(exc)
-                },
-                status_code=502,
-            )
+            return JSONResponse({"error": str(exc)}, status_code=502)
 
         finally:
-
             await client.aclose()
 
     try:
-
-        request_obj = client.build_request(
-            "GET",
-            url,
-            headers=request_headers,
-        )
-
-        response = await client.send(
-            request_obj,
-            stream=True,
-        )
+        request_obj = client.build_request("GET", url, headers=request_headers)
+        response = await client.send(request_obj, stream=True)
 
     except Exception as exc:
-
         await client.aclose()
-
-        return JSONResponse(
-            {
-                "error": str(exc)
-            },
-            status_code=502,
-        )
+        return JSONResponse({"error": str(exc)}, status_code=502)
 
     forwarded = {}
 
@@ -3958,32 +2129,16 @@ async def proxy_piped_stream(
         "accept-ranges",
         "cache-control",
     ):
-
         if header in response.headers:
+            forwarded[header] = response.headers[header]
 
-            forwarded[
-                header
-            ] = response.headers[
-                header
-            ]
-
-    forwarded.setdefault(
-        "accept-ranges",
-        "bytes",
-    )
+    forwarded.setdefault("accept-ranges", "bytes")
 
     async def generate():
-
         try:
-
-            async for chunk in response.aiter_bytes(
-                65536
-            ):
-
+            async for chunk in response.aiter_bytes(65536):
                 yield chunk
-
         finally:
-
             await response.aclose()
             await client.aclose()
 
@@ -3994,85 +2149,41 @@ async def proxy_piped_stream(
     )
 
 
-@router.get(
-    "/api/pipedstream/{video_id}"
-)
+@router.get("/api/pipedstream/{video_id}")
 async def api_piped_stream(
     video_id: str,
     want_proxy: bool = True,
     request: Request = None,
 ):
-
-    result = await _fetch_piped_streams(
-        video_id
-    )
+    result = await _fetch_piped_streams(video_id)
 
     if not result:
-
         return JSONResponse(
-            {
-                "error":
-                    "Piped APIからストリームURLを取得できませんでした"
-            },
+            {"error": "Piped APIからストリームURLを取得できませんでした"},
             status_code=502,
         )
 
-    combined = result.get(
-        "combined_url"
-    )
+    combined = result.get("combined_url")
+    hls = result.get("hls_url")
+    fallback = result.get("fallback_url")
 
-    hls = result.get(
-        "hls_url"
-    )
-
-    fallback = result.get(
-        "fallback_url"
-    )
-
-    stream_url = (
-        combined
-        or hls
-        or fallback
-    )
+    stream_url = combined or hls or fallback
 
     if not stream_url:
-
         return JSONResponse(
-            {
-                "error":
-                    "ストリームURLが見つかりませんでした"
-            },
+            {"error": "ストリームURLが見つかりませんでした"},
             status_code=502,
         )
 
-    stream_type = (
-        "combined"
-        if combined
-        else (
-            "hls"
-            if hls
-            else "video_only"
-        )
-    )
+    stream_type = "combined" if combined else ("hls" if hls else "video_only")
 
-    instance = (
-        result.get(
-            "instance"
-        )
-        or ""
-    )
+    instance = result.get("instance") or ""
 
     if want_proxy:
-
         return JSONResponse(
             {
                 "mode": "proxy",
-                "proxy_url": (
-                    "/proxy/piped-stream?url="
-                    + quote(
-                        stream_url
-                    )
-                ),
+                "proxy_url": "/proxy/piped-stream?url=" + quote(stream_url),
                 "instance": instance,
                 "remaining": -1,
                 "stream_type": stream_type,
@@ -4089,178 +2200,92 @@ async def api_piped_stream(
     )
 
 
-@router.get(
-    "/shorts/{v}",
-    response_class=HTMLResponse,
-)
+def _nocookie_url(video_id: str) -> str:
+    return NOCOOKIE_EMBED_BASE + quote(video_id, safe="")
+
+
+async def _wait_for_results(
+    tasks: List["asyncio.Task"],
+    timeout: float = PAGE_WAIT_SECONDS,
+) -> List[Any]:
+    """
+    最大 timeout 秒だけ待ち、終わったタスクの結果を返す(未完了・失敗は None)。
+    未完了のタスクはキャンセルせずバックグラウンドで続行させ、キャッシュを温める。
+    nocookie の埋め込みは動画IDだけで表示できるので、APIの完了は待ちきらない。
+    """
+    _, pending = await asyncio.wait(tasks, timeout=timeout)
+
+    for task in pending:
+        task.add_done_callback(
+            lambda t: t.cancelled() or t.exception()  # 例外を回収して警告を防ぐ
+        )
+
+    results: List[Any] = []
+    for task in tasks:
+        if task.done() and not task.cancelled() and task.exception() is None:
+            results.append(task.result())
+        else:
+            results.append(None)
+    return results
+
+
+@router.get("/shorts/{v}", response_class=HTMLResponse)
 async def shorts_player(
     request: Request,
     v: str,
     force_instance: Optional[str] = Query(None),
-    info_api: Optional[str] = Query(
-        None,
-        alias="info_api",
-    ),
-    stream_api: Optional[str] = Query(
-        None,
-        alias="stream_api",
-    ),
+    info_api: Optional[str] = Query(None, alias="info_api"),
+    stream_api: Optional[str] = Query(None, alias="stream_api"),
     api: Optional[str] = Query(None),
 ):
-
-    resolved_info_api = (
-        info_api
-        or api
-        or None
-    )
-
-    resolved_stream_api = (
-        stream_api
-        or api
-        or None
-    )
+    resolved_info_api = info_api or api or None
+    resolved_stream_api = stream_api or api or None
 
     try:
-
         video_task = asyncio.create_task(
-            fetch_video_info(
-                v,
-                force_instance=force_instance,
-                api=resolved_info_api,
-            )
+            fetch_video_info(v, force_instance=force_instance, api=resolved_info_api)
         )
-
         stream_task = asyncio.create_task(
             fetch_fastest_stream_urls(
-                v,
-                api=resolved_stream_api,
-                force_instance=force_instance,
+                v, api=resolved_stream_api, force_instance=force_instance
             )
         )
-
         comment_task = asyncio.create_task(
-            fetch_comments(
-                v,
-                force_instance=force_instance,
-                api=resolved_info_api,
-            )
+            fetch_comments(v, force_instance=force_instance, api=resolved_info_api)
         )
 
-        video_data, stream_data, comment_data = (
-            await asyncio.gather(
-                video_task,
-                stream_task,
-                comment_task,
-                return_exceptions=True,
-            )
+        video_data, stream_data, comment_data = await _wait_for_results(
+            [video_task, stream_task, comment_task]
         )
 
-        if (
-            isinstance(
-                video_data,
-                Exception,
-            )
-            and isinstance(
-                stream_data,
-                Exception,
-            )
-        ):
+        v_data = video_data if isinstance(video_data, dict) else {}
+        s_data = stream_data if isinstance(stream_data, dict) else {}
 
-            raise video_data
+        video_urls = s_data.get("videoUrls", [])
 
-        v_data = (
-            video_data
-            if isinstance(
-                video_data,
-                dict,
-            )
-            else {}
-        )
+        if not video_urls and v_data:
+            fallback = _normalize_invidious_streams(v_data)
+            video_urls = fallback.get("videoUrls", [])
 
-        s_data = (
-            stream_data
-            if isinstance(
-                stream_data,
-                dict,
-            )
-            else {}
-        )
+        comments = process_comments(comment_data)
 
-        video_urls = (
-            s_data.get(
-                "videoUrls",
-                [],
-            )
-        )
-
-        if (
-            not video_urls
-            and v_data
-        ):
-
-            fallback = _normalize_invidious_streams(
-                v_data
-            )
-
-            video_urls = fallback.get(
-                "videoUrls",
-                [],
-            )
-
-        comments = process_comments(
-            comment_data
-        )
-
-        info_api_used = (
-            v_data.get(
-                "api_used"
-            )
-            or v_data.get(
-                "_source"
-            )
-            or "unknown"
-        )
-
-        stream_api_used = (
-            s_data.get(
-                "stream_api_used"
-            )
-            or "unknown"
-        )
+        info_api_used = v_data.get("api_used") or v_data.get("_source") or "unknown"
+        stream_api_used = s_data.get("stream_api_used") or "unknown"
 
         return templates.TemplateResponse(
             "short.html",
             {
                 "request": request,
                 "videoid": v,
-                "video_title": v_data.get(
-                    "title",
-                    "",
-                ),
+                "nocookie_url": _nocookie_url(v),
+                "video_title": v_data.get("title", ""),
                 "videourls": video_urls,
-                "author": v_data.get(
-                    "author",
-                    "",
-                ),
-                "view_count": v_data.get(
-                    "viewCount",
-                    0,
-                ),
-                "like_count": v_data.get(
-                    "likeCount",
-                    0,
-                ),
+                "author": v_data.get("author", ""),
+                "view_count": v_data.get("viewCount", 0),
+                "like_count": v_data.get("likeCount", 0),
                 "description": (
-                    v_data.get(
-                        "descriptionHtml"
-                    )
-                    or v_data.get(
-                        "description",
-                        "",
-                    ).replace(
-                        "\n",
-                        "<br>",
-                    )
+                    v_data.get("descriptionHtml")
+                    or (v_data.get("description", "") or "").replace("\n", "<br>")
                 ),
                 "comments": comments,
                 "info_api_used": info_api_used,
@@ -4270,457 +2295,157 @@ async def shorts_player(
         )
 
     except httpx.TimeoutException:
-
-        logger.error(
-            "Timeout in shorts_player: %s",
-            v,
-        )
-
-        return templates.TemplateResponse(
-            "apitimeout.html",
-            {
-                "request": request
-            },
-        )
+        logger.error("Timeout in shorts_player: %s", v)
+        return templates.TemplateResponse("apitimeout.html", {"request": request})
 
     except Exception as exc:
-
-        logger.error(
-            "Error in shorts_player %s: %s",
-            v,
-            exc,
-        )
+        logger.error("Error in shorts_player %s: %s", v, exc)
 
         try:
-
             instances = await get_video_back_instances()
-
         except Exception:
-
             instances = []
 
         return templates.TemplateResponse(
             "apiallerror.html",
-            {
-                "request": request,
-                "instances": instances,
-            },
+            {"request": request, "instances": instances},
         )
 
 
-@router.get(
-    "/watch",
-    response_class=HTMLResponse,
-)
+@router.get("/watch", response_class=HTMLResponse)
 async def watch(
     request: Request,
     v: str = Query(...),
-    list: Optional[str] = Query(None),
+    playlist_id: Optional[str] = Query(None, alias="list"),
     force_instance: Optional[str] = Query(None),
-    info_api: Optional[str] = Query(
-        None,
-        alias="info_api",
-    ),
-    stream_api: Optional[str] = Query(
-        None,
-        alias="stream_api",
-    ),
+    info_api: Optional[str] = Query(None, alias="info_api"),
+    stream_api: Optional[str] = Query(None, alias="stream_api"),
     api: Optional[str] = Query(None),
 ):
-
-    resolved_info_api = (
-        info_api
-        or api
-        or None
-    )
-
-    resolved_stream_api = (
-        stream_api
-        or api
-        or None
-    )
+    resolved_info_api = info_api or api or None
+    resolved_stream_api = stream_api or api or None
 
     try:
-
         video_task = asyncio.create_task(
-            fetch_video_info(
-                v,
-                force_instance=force_instance,
-                api=resolved_info_api,
-            )
+            fetch_video_info(v, force_instance=force_instance, api=resolved_info_api)
         )
-
         stream_task = asyncio.create_task(
             fetch_fastest_stream_urls(
-                v,
-                api=resolved_stream_api,
-                force_instance=force_instance,
+                v, api=resolved_stream_api, force_instance=force_instance
             )
         )
-
         comment_task = asyncio.create_task(
-            fetch_comments(
-                v,
-                force_instance=force_instance,
-                api=resolved_info_api,
-            )
+            fetch_comments(v, force_instance=force_instance, api=resolved_info_api)
         )
-
         playlist_task = asyncio.create_task(
-            _fetch_playlist(
-                list,
-                force_instance,
-            )
+            _fetch_playlist(playlist_id, force_instance)
         )
 
-        (
-            video_data,
-            stream_data,
-            comment_data,
-            playlist_data,
-        ) = await asyncio.gather(
-            video_task,
-            stream_task,
-            comment_task,
-            playlist_task,
-            return_exceptions=True,
+        # nocookie 埋め込みで再生できるので、最大 PAGE_WAIT_SECONDS 待ったら
+        # 取れている情報だけでページを表示する
+        video_data, stream_data, comment_data, playlist_data = await _wait_for_results(
+            [video_task, stream_task, comment_task, playlist_task]
         )
 
-        if (
-            isinstance(
-                video_data,
-                Exception,
-            )
-            and isinstance(
-                stream_data,
-                Exception,
-            )
-        ):
-
-            raise video_data
-
-        v_data = (
-            video_data
-            if isinstance(
-                video_data,
-                dict,
-            )
-            else {}
-        )
-
-        s_data = (
-            stream_data
-            if isinstance(
-                stream_data,
-                dict,
-            )
-            else {}
-        )
-
-        p_data = (
-            playlist_data
-            if isinstance(
-                playlist_data,
-                dict,
-            )
-            else {}
-        )
+        v_data = video_data if isinstance(video_data, dict) else {}
+        s_data = stream_data if isinstance(stream_data, dict) else {}
+        p_data = playlist_data if isinstance(playlist_data, dict) else {}
 
         playlist_videos = []
 
-        for item in (
-            p_data.get(
-                "videos",
-                [],
-            )
-            or []
-        ):
-
-            if not isinstance(
-                item,
-                dict,
-            ):
+        for item in (p_data.get("videos", []) or []):
+            if not isinstance(item, dict):
                 continue
-
             playlist_videos.append(
                 {
-                    "videoId": item.get(
-                        "videoId"
-                    ),
-                    "title": item.get(
-                        "title"
-                    ),
-                    "author": item.get(
-                        "author"
-                    ),
+                    "videoId": item.get("videoId"),
+                    "title": item.get("title"),
+                    "author": item.get("author"),
                 }
             )
 
-        stream_urls = s_data.get(
-            "streamUrls",
-            [],
-        )
+        stream_urls = s_data.get("streamUrls", [])
+        video_urls = s_data.get("videoUrls", [])
 
-        video_urls = s_data.get(
-            "videoUrls",
-            [],
-        )
-
-        if (
-            not stream_urls
-            and v_data
-        ):
-
-            fallback = _normalize_invidious_streams(
-                v_data
-            )
-
-            stream_urls = fallback.get(
-                "streamUrls",
-                [],
-            )
-
-            video_urls = fallback.get(
-                "videoUrls",
-                [],
-            )
+        if not stream_urls and v_data:
+            fallback = _normalize_invidious_streams(v_data)
+            stream_urls = fallback.get("streamUrls", [])
+            video_urls = fallback.get("videoUrls", [])
 
         recommended = []
 
-        for item in (
-            v_data.get(
-                "recommendedVideos",
-                [],
-            )
-            or []
-        ):
-
-            if not isinstance(
-                item,
-                dict,
-            ):
+        for item in (v_data.get("recommendedVideos", []) or []):
+            if not isinstance(item, dict):
                 continue
-
             recommended.append(
                 {
-                    "video_id": (
-                        item.get(
-                            "video_id"
-                        )
-                        or item.get(
-                            "videoId"
-                        )
-                    ),
-                    "title": item.get(
-                        "title"
-                    ),
-                    "author": item.get(
-                        "author"
-                    ),
+                    "video_id": item.get("video_id") or item.get("videoId"),
+                    "title": item.get("title"),
+                    "author": item.get("author"),
                     "view_count_text": (
-                        item.get(
-                            "view_count_text"
-                        )
-                        or item.get(
-                            "viewCountText"
-                        )
+                        item.get("view_count_text") or item.get("viewCountText")
                     ),
-                    "thumbnail": item.get(
-                        "thumbnail",
-                        "",
-                    ),
+                    "thumbnail": item.get("thumbnail", ""),
                 }
             )
 
-        author_icon = (
-            v_data.get(
-                "authorIcon"
-            )
-            or ""
-        )
+        author_icon = v_data.get("authorIcon") or ""
 
         if not author_icon:
-
-            thumbnails = v_data.get(
-                "authorThumbnails",
-                [],
-            )
-
-            if (
-                isinstance(
-                    thumbnails,
-                    list,
-                )
-                and thumbnails
-            ):
-
+            thumbnails = v_data.get("authorThumbnails", [])
+            if isinstance(thumbnails, list) and thumbnails:
                 last = thumbnails[-1]
+                if isinstance(last, dict):
+                    author_icon = last.get("url", "")
 
-                if isinstance(
-                    last,
-                    dict,
-                ):
+        formatted_comments = process_comments(comment_data)
 
-                    author_icon = last.get(
-                        "url",
-                        "",
-                    )
+        info_api_used = v_data.get("api_used") or v_data.get("_source") or "unknown"
+        stream_api_used = s_data.get("stream_api_used") or "unknown"
 
-        formatted_comments = process_comments(
-            comment_data
-        )
-
-        info_api_used = (
-            v_data.get(
-                "api_used"
-            )
-            or v_data.get(
-                "_source"
-            )
-            or "unknown"
-        )
-
-        stream_api_used = (
-            s_data.get(
-                "stream_api_used"
-            )
-            or "unknown"
-        )
-
-        response = templates.TemplateResponse(
+        return templates.TemplateResponse(
             "watch.html",
             {
                 "request": request,
                 "videoid": v,
-
-                "video_title": (
-                    v_data.get(
-                        "title"
-                    )
-                    or s_data.get(
-                        "title",
-                        "",
-                    )
-                ),
-
+                "nocookie_url": _nocookie_url(v),
+                "video_title": v_data.get("title") or s_data.get("title", ""),
                 "videourls": video_urls,
-
                 "streamUrls": stream_urls,
-
-                "author": (
-                    v_data.get(
-                        "author"
-                    )
-                    or s_data.get(
-                        "author",
-                        "",
-                    )
-                ),
-
-                "author_id": (
-                    v_data.get(
-                        "authorId"
-                    )
-                    or s_data.get(
-                        "authorId",
-                        "",
-                    )
-                ),
-
+                "author": v_data.get("author") or s_data.get("author", ""),
+                "author_id": v_data.get("authorId") or s_data.get("authorId", ""),
                 "author_icon": author_icon,
-
-                "subscribers_count": (
-                    v_data.get(
-                        "subCountText",
-                        "非公開",
-                    )
-                ),
-
-                "view_count": (
-                    v_data.get(
-                        "viewCount",
-                        s_data.get(
-                            "viewCount",
-                            0,
-                        ),
-                    )
-                ),
-
-                "like_count": v_data.get(
-                    "likeCount",
-                    0,
-                ),
-
+                "subscribers_count": v_data.get("subCountText", "非公開"),
+                "view_count": v_data.get("viewCount", s_data.get("viewCount", 0)),
+                "like_count": v_data.get("likeCount", 0),
                 "description": (
-                    v_data.get(
-                        "descriptionHtml"
-                    )
-                    or (
-                        v_data.get(
-                            "description",
-                            "",
-                        ) or ""
-                    ).replace(
-                        "\n",
-                        "<br>",
-                    )
+                    v_data.get("descriptionHtml")
+                    or (v_data.get("description", "") or "").replace("\n", "<br>")
                 ),
-
-                "published": v_data.get(
-                    "publishedText",
-                    "",
-                ),
-
+                "published": v_data.get("publishedText", ""),
                 "comments": formatted_comments,
-
                 "recommended_videos": recommended,
-
                 "playlist_videos": playlist_videos,
-
-                "playlist_id": list,
-
+                "playlist_id": playlist_id,
                 "info_api_used": info_api_used,
                 "stream_api_used": stream_api_used,
                 "api_used": info_api_used,
             },
         )
 
-        return response
-
     except httpx.TimeoutException:
-
-        logger.error(
-            "Timeout in watch: %s",
-            v,
-        )
-
-        return templates.TemplateResponse(
-            "apitimeout.html",
-            {
-                "request": request
-            },
-        )
+        logger.error("Timeout in watch: %s", v)
+        return templates.TemplateResponse("apitimeout.html", {"request": request})
 
     except Exception as exc:
-
-        logger.error(
-            "Error in watch %s: %s",
-            v,
-            exc,
-        )
+        logger.error("Error in watch %s: %s", v, exc)
 
         try:
-
             instances = await get_video_back_instances()
-
         except Exception:
-
             instances = []
 
         return templates.TemplateResponse(
             "apiallerror.html",
-            {
-                "request": request,
-                "instances": instances,
-            },
+            {"request": request, "instances": instances},
         )
