@@ -928,6 +928,7 @@
     const NOCOOKIE_BASE = {{ (nocookie_url or '')|tojson }};
     const SERVER_STREAMS = {{ (streamUrls or [])|tojson }};
     const SERVER_VIDEO_URLS = {{ (videourls or [])|tojson }};
+    const SERVER_HAS_INFO = {{ 'true' if video_title else 'false' }};
 
     const START_TIMEOUT_MS = 8000;
     const STREAM_REFRESH_TIMEOUT_MS = 12000;
@@ -1675,8 +1676,60 @@
         document.getElementById('apiInfoLabel').textContent = `API: ${infoApi.substring(0, 3).toUpperCase()} / ${streamApi.substring(0, 3).toUpperCase()}`;
     }
 
+    // ---------- Video info fallback ----------
+    // サーバー描画で動画情報が取れなかった場合だけ、画面側から /api/video を取り直す。
+    async function loadVideoInfoFromApi(attempt = 0) {
+        let info = null;
+        try {
+            info = await fetchJson(`/api/video/${encodeURIComponent(videoId)}`, 10000);
+        } catch (e) {
+            console.warn('[info] load failed', e);
+        }
+        if (info && info.title) {
+            applyVideoInfo(info);
+            return;
+        }
+        if (attempt < 1) {
+            await new Promise((r) => setTimeout(r, 1500));
+            return loadVideoInfoFromApi(attempt + 1);
+        }
+        const title = document.getElementById('video-title');
+        if (title) title.textContent = '動画情報を取得できませんでした（再読み込みしてください）';
+    }
+
+    function applyVideoInfo(info) {
+        const title = document.getElementById('video-title');
+        if (title) title.textContent = info.title;
+        document.title = `${info.title} - YouTube`;
+
+        const channel = document.getElementById('channel-text');
+        if (channel && info.author) {
+            const link = document.createElement('a');
+            link.className = 'yt-channel-name';
+            link.href = `/channel/${encodeURIComponent(info.authorId || '')}`;
+            link.textContent = info.author;
+            const subs = document.createElement('span');
+            subs.className = 'yt-channel-subscribers';
+            subs.textContent = `チャンネル登録者数 ${info.subscribersText || '非公開'}`;
+            channel.replaceChildren(link, subs);
+        }
+        const avatarLink = document.getElementById('channel-avatar');
+        if (avatarLink && info.authorId) avatarLink.href = `/channel/${encodeURIComponent(info.authorId)}`;
+        const avatarImg = avatarLink ? avatarLink.querySelector('img') : null;
+        if (avatarImg && info.authorIcon) { avatarImg.src = info.authorIcon; avatarImg.style.display = ''; }
+
+        const viewsEl = document.querySelector('.yt-description-header > span');
+        if (viewsEl && info.viewCount) viewsEl.textContent = `${Number(info.viewCount).toLocaleString('ja-JP')} 回視聴`;
+
+        const body = document.getElementById('description-body');
+        if (body && info.description) body.innerHTML = info.description;
+
+        saveWatchHistory(); // 同じ動画は重複せず、タイトルを更新する
+    }
+
     // ---------- Init ----------
     setCandidates(SERVER_STREAMS, SERVER_VIDEO_URLS);
+    if (!SERVER_HAS_INFO) loadVideoInfoFromApi();
     setQualityLabel('自動');
     loadComments();
 

@@ -40,3 +40,9 @@
 - `preconnect` を fonts.googleapis / fonts.gstatic / cdnjs に設定し、アイコンフォントなどの接続を先に確立。
 - `uvloop` と `httptools` を requirements に追加（uvicorn が自動で利用し、イベントループとHTTP解析が速くなる）。
 - 元のコードは `img/` が無いとローカルで起動できなかった（Dockerfileでは作られる）。起動時に作成するよう修正済み。
+
+## 修正: 動画情報もストリームも取得できない (第3弾)
+- Invidious インスタンス一覧(GitHub)の取得に失敗し、キャッシュも無いと「インスタンスなし」で動画情報・ストリームが同時に失敗していた。組み込みの一覧にフォールバックし、予備の一覧URLも試す。
+- `local=true` の応答が得られなかった場合は、通常の動画URLで再試行する(情報・ストリーム共通)。
+- `GET /api/video/{videoId}` を追加。サーバー描画で動画情報が欠けた場合、画面が取り直す。
+- `GET /api/diag/{videoId}` を追加。各ソース(Invidious / Piped / Sia / Sennin)の成否・所要時間・エラーを一覧で返す。障害の切り分け用。

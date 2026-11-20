@@ -16,7 +16,12 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
-from app.search import fetch_with_inflight, race_first
+from app.search import (
+    FALLBACK_INVIDIOUS_INSTANCES,
+    INVIDIOUS_VIDEO_LIST_URL as _INVIDIOUS_LIST_BACKUP_URL,
+    fetch_with_inflight,
+    race_first,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -152,25 +157,38 @@ _INVIDIOUS_LIST_KEY = "__invidious_list__"
 
 
 async def _fetch_invidious_list() -> list:
+    """Invidious インスタンス一覧。取得に失敗しても空にしない(組み込みの一覧で必ず続行する)。
+
+    以前は一覧の取得に失敗してキャッシュも無いと例外/空を返し、動画情報もストリームも
+    すべて「インスタンスなし」で失敗していた。
+    """
     now = time.time()
     cached = category_cache.get(_INVIDIOUS_LIST_KEY)
     if cached and now - cached["time"] < CACHE_TTL:
         return cached["instances"]
-    try:
-        client = await get_client()
-        resp = await client.get(INVIDIOUS_LIST_URL, timeout=10)
-        resp.raise_for_status()
-        instances = resp.json()
-        if not isinstance(instances, list):
-            instances = []
-    except Exception:
-        if cached:
-            return cached["instances"]
-        raise
+
+    instances: list = []
+    for url in (INVIDIOUS_LIST_URL, _INVIDIOUS_LIST_BACKUP_URL):
+        try:
+            client = await get_client()
+            resp = await client.get(url, timeout=6)
+            resp.raise_for_status()
+            data = resp.json()
+            if isinstance(data, list):
+                instances = [str(x).strip().rstrip("/") for x in data if str(x).strip()]
+            if instances:
+                break
+        except Exception as exc:
+            logger.debug("Invidious list %s failed: %s", url, exc)
+
     if not instances:
         if cached:
             return cached["instances"]
-        return []
+        instances = list(FALLBACK_INVIDIOUS_INSTANCES)
+        # 失敗時は短時間だけ保持して、毎回の再取得待ちを避ける
+        category_cache[_INVIDIOUS_LIST_KEY] = {"instances": instances, "time": now - CACHE_TTL + 120}
+        return instances
+
     category_cache[_INVIDIOUS_LIST_KEY] = {"instances": instances, "time": now}
     return instances
 
@@ -1093,6 +1111,30 @@ def _process_related_videos(raw_rel: List[Any]) -> List[Dict[str, Any]]:
 
 
 INVIDIOUS_VIDEO_PATH = "/api/v1/videos/{video_id}?local=true"
+INVIDIOUS_VIDEO_PLAIN_PATH = "/api/v1/videos/{video_id}"
+
+
+async def _invidious_video_data(video_id: str, force_instance: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Invidious の動画データを取得。local=true で失敗したら通常URLで再試行する(URLの書き換えが原因の失敗を避ける)。"""
+    for path in (INVIDIOUS_VIDEO_PATH, INVIDIOUS_VIDEO_PLAIN_PATH):
+        try:
+            result = await proxy_parallel(
+                "video",
+                path.format(video_id=video_id),
+                override_instances=([force_instance] if force_instance else None),
+                prefer_valid_stream=True,
+            )
+        except Exception as exc:
+            logger.debug("Invidious %s failed: %s", path, exc)
+            continue
+        data = result.get("data") if isinstance(result, dict) else None
+        if isinstance(data, dict) and not data.get("error") and (
+            data.get("title") or data.get("formatStreams") or data.get("adaptiveFormats")
+        ):
+            data = dict(data)
+            data["_instance"] = result.get("used_instance", "")
+            return data
+    return None
 
 
 async def fetch_video_info_invidious_robust(
@@ -1100,32 +1142,11 @@ async def fetch_video_info_invidious_robust(
     force_instance: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     start = time.monotonic()
-
-    try:
-        # 情報とストリームは同じ Invidious レスポンスを使う(パス・prefer フラグを揃えて1回の通信にまとめる)
-        result = await proxy_parallel(
-            "video",
-            INVIDIOUS_VIDEO_PATH.format(video_id=video_id),
-            override_instances=([force_instance] if force_instance else None),
-            prefer_valid_stream=True,
-        )
-
-        data = result.get("data") if isinstance(result, dict) else None
-
-        if (
-            isinstance(data, dict)
-            and not data.get("error")
-            and (data.get("title") or data.get("videoId"))
-        ):
-            data = dict(data)
-            data["api_used"] = "invidious"
-            data["_instance"] = result.get("used_instance", "")
-            await record_api_performance("invidious", True, time.monotonic() - start)
-            return data
-
-    except Exception as exc:
-        logger.debug("Invidious video error %s: %s", video_id, exc)
-
+    data = await _invidious_video_data(video_id, force_instance)
+    if data and data.get("title"):
+        data["api_used"] = "invidious"
+        await record_api_performance("invidious", True, time.monotonic() - start)
+        return data
     await record_api_performance("invidious", False, time.monotonic() - start)
     return None
 
@@ -1582,27 +1603,16 @@ async def _fetch_invidious_streams(
     force_instance: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     start = time.monotonic()
-
     try:
-        result = await proxy_parallel(
-            "video",
-            INVIDIOUS_VIDEO_PATH.format(video_id=video_id),
-            override_instances=([force_instance] if force_instance else None),
-            prefer_valid_stream=True,
-        )
+        data = await _invidious_video_data(video_id, force_instance)
+        if not data:
+            raise RuntimeError("no Invidious video data")
 
-        data = result.get("data") if isinstance(result, dict) else None
-
-        if not isinstance(data, dict):
-            raise RuntimeError("invalid Invidious stream data")
-
-        normalized = _normalize_invidious_streams(data, base=result.get("used_instance", ""))
-
+        normalized = _normalize_invidious_streams(data, base=data.get("_instance", ""))
         if not normalized["streamUrls"] and not normalized["videoUrls"]:
             raise RuntimeError("empty Invidious streams")
 
         normalized["stream_api_used"] = "invidious"
-
         await record_api_performance("invidious", True, time.monotonic() - start)
         return normalized
 
@@ -2451,6 +2461,77 @@ async def api_streams(
         },
         headers={"Cache-Control": "no-store"},
     )
+
+
+@router.get("/api/video/{video_id}")
+async def api_video(video_id: str):
+    """動画情報のJSON。サーバー描画で情報が欠けた場合に画面側が取り直すために使う。"""
+    if not _VIDEO_ID_RE.match(video_id):
+        return JSONResponse({"error": "invalid id"}, status_code=400)
+
+    data = await fetch_video_info(video_id)
+    if not isinstance(data, dict) or not data.get("title"):
+        return JSONResponse({"error": "video info unavailable"}, status_code=502,
+                            headers={"Cache-Control": "no-store"})
+
+    thumbs = data.get("authorThumbnails") or []
+    author_icon = data.get("authorIcon") or ""
+    if not author_icon and isinstance(thumbs, list) and thumbs and isinstance(thumbs[-1], dict):
+        author_icon = thumbs[-1].get("url", "")
+
+    return JSONResponse(
+        {
+            "title": data.get("title", ""),
+            "author": data.get("author", ""),
+            "authorId": data.get("authorId", ""),
+            "authorIcon": author_icon,
+            "viewCount": data.get("viewCount", 0),
+            "likeCount": data.get("likeCount", 0),
+            "publishedText": data.get("publishedText", ""),
+            "subscribersText": data.get("subCountText", ""),
+            "description": data.get("descriptionHtml") or (data.get("description", "") or "").replace("\n", "<br>"),
+            "api_used": data.get("api_used", "unknown"),
+        },
+        headers={"Cache-Control": "public, max-age=60"},
+    )
+
+
+@router.get("/api/diag/{video_id}")
+async def api_diag(video_id: str):
+    """どのソースが成功/失敗したかを一度に確認するための診断API(障害の切り分け用)。"""
+    if not _VIDEO_ID_RE.match(video_id):
+        return JSONResponse({"error": "invalid id"}, status_code=400)
+
+    def _summary(res: Any) -> Dict[str, Any]:
+        if isinstance(res, dict):
+            return {"title": res.get("title") or None,
+                    "streamUrls": len(res.get("streamUrls") or []) if "streamUrls" in res else None}
+        return {"found": bool(res)}
+
+    async def _probe(name: str, fn):
+        t0 = time.monotonic()
+        try:
+            res = await asyncio.wait_for(fn(), timeout=14.0)
+            return {"source": name, "ok": bool(res), "ms": int((time.monotonic() - t0) * 1000),
+                    "detail": _summary(res)}
+        except Exception as exc:
+            return {"source": name, "ok": False, "ms": int((time.monotonic() - t0) * 1000),
+                    "error": (str(exc) or type(exc).__name__)[:300]}
+
+    probes = [
+        _probe("invidious.video(info+streams)", lambda: _invidious_video_data(video_id)),
+        _probe("piped.streams", lambda: _fetch_piped_data(video_id)),
+        _probe("sia.info", lambda: fetch_sia_video(video_id)),
+        _probe("sennin.info", lambda: fetch_sennin_video_info(video_id)),
+    ]
+    results = await asyncio.gather(*probes)
+    instances = await get_instances("video")
+    return JSONResponse({
+        "video_id": video_id,
+        "invidious_instances": instances[:12],
+        "invidious_instance_count": len(instances),
+        "results": results,
+    }, headers={"Cache-Control": "no-store"})
 
 
 @router.get("/watch", response_class=HTMLResponse)
