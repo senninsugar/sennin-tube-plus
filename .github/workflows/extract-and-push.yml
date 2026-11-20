@@ -1,0 +1,122 @@
+name: Extract and Push Upload Contents
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'upload/**'
+      - '!upload/.gitkeep'
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: extract-and-push-main
+  cancel-in-progress: false
+
+jobs:
+  extract-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: リポジトリのチェックアウト
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Gitユーザー情報のセットアップ
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: uploadフォルダ内のZIPを展開
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ ! -d "upload" ]; then
+            echo "uploadフォルダが見つかりません。"
+            exit 1
+          fi
+
+          shopt -s nullglob
+          zip_files=(upload/*.zip)
+
+          if [ ${#zip_files[@]} -eq 0 ]; then
+            echo "uploadフォルダ内にZIPファイルがありません。"
+            exit 1
+          fi
+
+          for zip_file in "${zip_files[@]}"; do
+            echo "展開中: $zip_file"
+
+            temp_dir="$(mktemp -d)"
+
+            unzip -o "$zip_file" -d "$temp_dir"
+
+            shopt -s dotglob nullglob
+            entries=("$temp_dir"/*)
+
+            if [ ${#entries[@]} -eq 1 ] && [ -d "${entries[0]}" ]; then
+              root_dir="${entries[0]}"
+              root_entries=("$root_dir"/*)
+
+              for item in "${root_entries[@]}"; do
+                name="$(basename "$item")"
+
+                if [ "$name" = ".git" ] || [ "$name" = ".github" ]; then
+                  continue
+                fi
+
+                rm -rf -- "$name"
+                mv -- "$item" .
+              done
+            else
+              for item in "${entries[@]}"; do
+                name="$(basename "$item")"
+
+                if [ "$name" = ".git" ] || [ "$name" = ".github" ]; then
+                  continue
+                fi
+
+                rm -rf -- "$name"
+                mv -- "$item" .
+              done
+            fi
+
+            rm -rf "$temp_dir"
+          done
+
+      - name: 展開元のuploadフォルダ内を整理（.gitkeep以外を削除）
+        shell: bash
+        run: |
+          # uploadフォルダが存在する場合、.gitkeepを残して他のZIPやファイルを削除する
+          if [ -d "upload" ]; then
+            find upload/ -mindepth 1 ! -name '.gitkeep' -exec rm -rf {} +
+          fi
+
+      - name: 変更をコミット
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "変更はありません。"
+            exit 0
+          fi
+
+          git commit -m "chore: auto-extract and push from upload folder [skip ci]"
+
+      - name: 最新のリモート変更を取り込んでプッシュ
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:main
