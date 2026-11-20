@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import hashlib
+import html as _html
 import json
 import logging
 import os
@@ -15,6 +16,8 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
+from app.search import fetch_with_inflight, race_first
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -27,13 +30,15 @@ CACHE_TTL = 5 * 60
 
 # nocookie 埋め込みが使えるので、APIの結果は最大この秒数だけ待ってページを表示する
 PAGE_WAIT_SECONDS = 4.0
+# 再生に必要なストリームは少し長めに待つ(コメントは画面表示後にJSで取得する)
+STREAM_WAIT_SECONDS = 6.0
 NOCOOKIE_EMBED_BASE = "https://www.youtube-nocookie.com/embed/"
 
 KEEPALIVE_TARGETS = [
     f"{INNERTUBE_BASE}/version",
 ]
 
-_CLIENT_TIMEOUT = httpx.Timeout(connect=5.0, read=18.0, write=5.0, pool=5.0)
+_CLIENT_TIMEOUT = httpx.Timeout(connect=4.0, read=10.0, write=5.0, pool=5.0)
 _CLIENT_LIMITS = httpx.Limits(max_keepalive_connections=20, keepalive_expiry=30.0)
 
 http_client: httpx.AsyncClient = None
@@ -407,11 +412,13 @@ async def proxy_parallel(
     prefer_valid_stream: bool = False,
     override_instances: list = None,
     no_cache: bool = False,
+    accept=None,
+    accept_tag: str = "",
 ) -> dict:
-    # prefer_* が違う呼び出し同士でキャッシュ/待ち合わせが混ざらないようキーに含める
+    # prefer_* / accept が違う呼び出し同士でキャッシュ/待ち合わせが混ざらないようキーに含める
     cache_key = (
         f"{category}:{invidious_path}:"
-        f"{int(prefer_valid_videos)}{int(prefer_valid_stream)}"
+        f"{int(prefer_valid_videos)}{int(prefer_valid_stream)}:{accept_tag}"
     )
     ttl = _proxy_resp_ttl.get(category, _PROXY_RESP_DEFAULT_TTL)
     use_cache = not no_cache and not exclude_list and override_instances is None
@@ -453,9 +460,8 @@ async def proxy_parallel(
             asyncio.create_task(_try_instance(base, invidious_path)): base
             for base in instances
         }
-        tasks = list(task_to_base)
         errors = []
-        pending = set(tasks)
+        pending = set(task_to_base)
         winner = None
         fallback = None
         try:
@@ -463,27 +469,25 @@ async def proxy_parallel(
                 done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
                 for task in done:
                     exc = task.exception()
-                    if exc is None:
-                        result = task.result()
-                        if prefer_valid_videos:
-                            if _has_valid_videos(result["data"]):
-                                if winner is None:
-                                    winner = result
-                            else:
-                                if fallback is None:
-                                    fallback = result
-                        elif prefer_valid_stream:
-                            if _has_valid_stream(result["data"]):
-                                if winner is None:
-                                    winner = result
-                            else:
-                                if fallback is None:
-                                    fallback = result
-                        elif winner is None:
-                            winner = result
-                    else:
+                    if exc is not None:
                         msg = str(exc) or type(exc).__name__
                         errors.append(f"{task_to_base.get(task, '?')}:{msg}")
+                        continue
+                    result = task.result()
+                    data = result["data"]
+                    if prefer_valid_videos:
+                        good = _has_valid_videos(data)
+                    elif prefer_valid_stream:
+                        good = _has_valid_stream(data)
+                    elif accept is not None:
+                        good = bool(accept(data))
+                    else:
+                        good = True
+                    if good:
+                        if winner is None:
+                            winner = result
+                    elif fallback is None:
+                        fallback = result
                 if winner is not None:
                     break
         finally:
@@ -690,44 +694,40 @@ _PIPED_INSTANCES = [
 ]
 
 
-async def _fetch_piped_data(video_id: str) -> Optional[Dict[str, Any]]:
-    """Piped の全インスタンスへ並列に問い合わせ、最初に成功したものを返す。"""
-
-    async def one(instance: str) -> Optional[Dict[str, Any]]:
-        try:
-            client = await get_client()
-            response = await client.get(
-                f"{instance}/streams/{video_id}",
-                timeout=httpx.Timeout(12.0, connect=4.0, read=8.0),
-                headers={"User-Agent": DEFAULT_UA},
-            )
-            if response.status_code != 200:
-                return None
-            data = response.json()
-            if not isinstance(data, dict):
-                return None
-            if data.get("error"):
-                return None
-            if not data.get("title"):
-                return None
-            data["_piped_instance"] = instance
-            return data
-        except Exception as exc:
-            logger.debug("Piped instance failed %s: %s", instance, exc)
-            return None
-
-    tasks = [asyncio.create_task(one(i)) for i in _PIPED_INSTANCES]
+async def _piped_one(instance: str, video_id: str) -> Optional[Dict[str, Any]]:
     try:
-        for coro in asyncio.as_completed(tasks):
-            result = await coro
-            if result:
-                return result
-    finally:
-        for t in tasks:
-            if not t.done():
-                t.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
-    return None
+        client = await get_client()
+        response = await client.get(
+            f"{instance}/streams/{video_id}",
+            timeout=httpx.Timeout(10.0, connect=3.0, read=8.0),
+            headers={"User-Agent": DEFAULT_UA},
+        )
+        if response.status_code != 200:
+            return None
+        data = response.json()
+        if not isinstance(data, dict) or data.get("error") or not data.get("title"):
+            return None
+        data["_piped_instance"] = instance
+        return data
+    except Exception as exc:
+        logger.debug("Piped instance failed %s: %s", instance, exc)
+        return None
+
+
+async def _fetch_piped_data(video_id: str) -> Optional[Dict[str, Any]]:
+    """Piped の全インスタンスへ並列に問い合わせ、最初に成功したものを返す。
+
+    情報取得とストリーム取得の両方から呼ばれるため、インフライト共有 + 5分キャッシュで
+    同じ動画に対する Piped への重複リクエストを1回にまとめる。
+    """
+
+    async def _race() -> Optional[Dict[str, Any]]:
+        factories = [
+            (lambda inst=inst: _piped_one(inst, video_id)) for inst in _PIPED_INSTANCES
+        ]
+        return await race_first(factories, accept=lambda d: isinstance(d, dict), timeout=10.0)
+
+    return await fetch_with_inflight(f"piped_raw:{video_id}", _race, ttl=300.0, retry_count=1)
 
 
 def _piped_date_to_relative(date_str: str) -> str:
@@ -1092,6 +1092,9 @@ def _process_related_videos(raw_rel: List[Any]) -> List[Dict[str, Any]]:
     return recommended
 
 
+INVIDIOUS_VIDEO_PATH = "/api/v1/videos/{video_id}?local=true"
+
+
 async def fetch_video_info_invidious_robust(
     video_id: str,
     force_instance: Optional[str] = None,
@@ -1099,11 +1102,12 @@ async def fetch_video_info_invidious_robust(
     start = time.monotonic()
 
     try:
+        # 情報とストリームは同じ Invidious レスポンスを使う(パス・prefer フラグを揃えて1回の通信にまとめる)
         result = await proxy_parallel(
             "video",
-            f"/api/v1/videos/{video_id}",
+            INVIDIOUS_VIDEO_PATH.format(video_id=video_id),
             override_instances=([force_instance] if force_instance else None),
-            prefer_valid_stream=False,
+            prefer_valid_stream=True,
         )
 
         data = result.get("data") if isinstance(result, dict) else None
@@ -1115,6 +1119,7 @@ async def fetch_video_info_invidious_robust(
         ):
             data = dict(data)
             data["api_used"] = "invidious"
+            data["_instance"] = result.get("used_instance", "")
             await record_api_performance("invidious", True, time.monotonic() - start)
             return data
 
@@ -1166,34 +1171,18 @@ async def _fetch_video_info_fastest(
     video_id: str,
     force_instance: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
-    tasks = [
-        asyncio.create_task(fetch_video_info_invidious_robust(video_id, force_instance)),
-        asyncio.create_task(_fetch_piped_info_wrapper(video_id)),
-        asyncio.create_task(fetch_sia_video(video_id)),
-        asyncio.create_task(fetch_sennin_video_info(video_id)),
+    factories = [
+        (lambda: fetch_video_info_invidious_robust(video_id, force_instance)),
+        (lambda: _fetch_piped_info_wrapper(video_id)),
+        (lambda: fetch_sia_video(video_id)),
+        (lambda: fetch_sennin_video_info(video_id)),
     ]
-
-    try:
-        for task in asyncio.as_completed(tasks, timeout=15.0):
-            try:
-                result = await task
-                if isinstance(result, dict) and result.get("title"):
-                    return result
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                logger.debug("Video info task error: %s", exc)
-
-    except asyncio.TimeoutError:
-        logger.debug("Video info fastest timeout: %s", video_id)
-
-    finally:
-        for task in tasks:
-            if not task.done():
-                task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
-
-    return None
+    # タイトルを持つ最初の結果を採用(遅いAPIを待ち続けない)
+    return await race_first(
+        factories,
+        accept=lambda r: isinstance(r, dict) and bool(r.get("title")),
+        timeout=10.0,
+    )
 
 
 async def _fetch_piped_info_wrapper(video_id: str) -> Optional[Dict[str, Any]]:
@@ -1237,7 +1226,18 @@ def _codec_name(mime: str) -> Tuple[str, str]:
     return container, encoding
 
 
-def _normalize_invidious_streams(data: Dict[str, Any]) -> Dict[str, List]:
+def _abs_url(url: str, base: str = "") -> str:
+    """Invidious の local=true などで返る相対URLを、インスタンスの絶対URLにする。"""
+    if not url:
+        return ""
+    if url.startswith("//"):
+        return "https:" + url
+    if url.startswith("/") and base:
+        return base.rstrip("/") + url
+    return url
+
+
+def _normalize_invidious_streams(data: Dict[str, Any], base: str = "") -> Dict[str, List]:
     if not isinstance(data, dict):
         return {
             "streamUrls": [],
@@ -1252,7 +1252,7 @@ def _normalize_invidious_streams(data: Dict[str, Any]) -> Dict[str, List]:
     for fmt in (data.get("formatStreams") or []):
         if not isinstance(fmt, dict):
             continue
-        url = fmt.get("url", "")
+        url = _abs_url(fmt.get("url", ""), base)
         if not url:
             continue
 
@@ -1281,7 +1281,7 @@ def _normalize_invidious_streams(data: Dict[str, Any]) -> Dict[str, List]:
     for fmt in (data.get("adaptiveFormats") or []):
         if not isinstance(fmt, dict):
             continue
-        url = fmt.get("url", "")
+        url = _abs_url(fmt.get("url", ""), base)
         if not url:
             continue
 
@@ -1316,20 +1316,19 @@ def _normalize_invidious_streams(data: Dict[str, Any]) -> Dict[str, List]:
             if "video" in str(item.get("type", "")) and item.get("url")
         ]
 
-    stream_urls = []
+    # 1) 映像+音声が1本になった通常のMP4(最も確実に再生できるので先頭)
+    stream_urls = [
+        {
+            "url": fmt.get("url"),
+            "resolution": fmt.get("qualityLabel"),
+            "format": "mp4/mixed",
+            "audioUrl": "",
+        }
+        for fmt in format_streams
+    ]
 
-    for fmt in format_streams:
-        stream_urls.append(
-            {
-                "url": fmt.get("url"),
-                "resolution": fmt.get("qualityLabel"),
-                "format": "mp4/mixed",
-                "audioUrl": "",
-            }
-        )
-
+    # 2) 映像のみ + 音声(別トラックで同期再生する)
     audio_url = None
-
     for fmt in adaptive_formats:
         mime = str(fmt.get("type", ""))
         if "audio" in mime and fmt.get("url"):
@@ -1350,6 +1349,19 @@ def _normalize_invidious_streams(data: Dict[str, Any]) -> Dict[str, List]:
                     "audioUrl": audio_url or "",
                 }
             )
+
+    # 3) HLS (ライブ配信など。Invidious が hlsUrl を返す場合のみ)
+    hls_url = _abs_url(data.get("hlsUrl") or "", base)
+    if hls_url:
+        stream_urls.append(
+            {
+                "url": hls_url,
+                "resolution": "HLS",
+                "format": "application/x-mpegURL",
+                "audioUrl": "",
+            }
+        )
+        video_urls.append(hls_url)
 
     return {
         "streamUrls": stream_urls,
@@ -1374,6 +1386,17 @@ def _normalize_codec(codec: str) -> str:
         return "Opus"
 
     return codec
+
+
+def _best_audio_url(adaptive_formats: List[Dict[str, Any]]) -> str:
+    audio = [
+        f for f in adaptive_formats
+        if str(f.get("type", "")).startswith("audio/") and f.get("url")
+    ]
+    if not audio:
+        return ""
+    audio.sort(key=lambda f: int(float(f.get("bitrate") or 0)), reverse=True)
+    return audio[0]["url"]
 
 
 def _piped_stream_result(data: Dict[str, Any]) -> Dict[str, Any]:
@@ -1506,13 +1529,39 @@ def _piped_stream_result(data: Dict[str, Any]) -> Dict[str, Any]:
         ]
 
     stream_urls = []
-
     for item in format_streams:
+        if item.get("isHls"):
+            continue
         stream_urls.append(
             {
                 "url": item.get("url"),
                 "resolution": item.get("qualityLabel"),
                 "format": f"{item.get('container', 'mp4')}/mixed",
+                "audioUrl": "",
+            }
+        )
+
+    # 映像のみの候補は、最良の音声トラックと組にして返す(音声なしの候補はフロントで使われない)
+    best_audio = _best_audio_url(adaptive_formats)
+    for item in adaptive_formats:
+        if "video" not in str(item.get("type", "")) or not item.get("url"):
+            continue
+        container = "webm" if item.get("container") == "webm" else "mp4"
+        stream_urls.append(
+            {
+                "url": item.get("url"),
+                "resolution": item.get("qualityLabel"),
+                "format": f"{container}/videoOnly",
+                "audioUrl": best_audio,
+            }
+        )
+
+    if hls_url:
+        stream_urls.append(
+            {
+                "url": hls_url,
+                "resolution": "HLS",
+                "format": "application/x-mpegURL",
                 "audioUrl": "",
             }
         )
@@ -1537,7 +1586,7 @@ async def _fetch_invidious_streams(
     try:
         result = await proxy_parallel(
             "video",
-            f"/api/v1/videos/{video_id}",
+            INVIDIOUS_VIDEO_PATH.format(video_id=video_id),
             override_instances=([force_instance] if force_instance else None),
             prefer_valid_stream=True,
         )
@@ -1547,7 +1596,7 @@ async def _fetch_invidious_streams(
         if not isinstance(data, dict):
             raise RuntimeError("invalid Invidious stream data")
 
-        normalized = _normalize_invidious_streams(data)
+        normalized = _normalize_invidious_streams(data, base=result.get("used_instance", ""))
 
         if not normalized["streamUrls"] and not normalized["videoUrls"]:
             raise RuntimeError("empty Invidious streams")
@@ -1753,46 +1802,20 @@ def _normalize_generic_api_streams(data: Dict[str, Any]) -> Optional[Dict[str, A
     }
 
 
+def _has_playable_streams(res: Any) -> bool:
+    return isinstance(res, dict) and bool(res.get("streamUrls"))
+
+
 async def _fetch_streams_fastest(
     video_id: str,
     force_instance: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
-    tasks = [
-        asyncio.create_task(_fetch_invidious_streams(video_id, force_instance)),
-        asyncio.create_task(_fetch_piped_streams(video_id)),
+    factories = [
+        (lambda: _fetch_invidious_streams(video_id, force_instance)),
+        (lambda: _fetch_piped_streams(video_id)),
     ]
-
-    try:
-        for task in asyncio.as_completed(tasks, timeout=15.0):
-            try:
-                result = await task
-
-                if not result:
-                    continue
-
-                if (
-                    result.get("streamUrls")
-                    or result.get("videoUrls")
-                    or result.get("formatStreams")
-                    or result.get("adaptiveFormats")
-                ):
-                    return result
-
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                logger.debug("Stream task failed: %s", exc)
-
-    except asyncio.TimeoutError:
-        logger.debug("Stream fastest timeout: %s", video_id)
-
-    finally:
-        for task in tasks:
-            if not task.done():
-                task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
-
-    return None
+    # 再生候補(streamUrls)を持つ最初の結果を採用する
+    return await race_first(factories, accept=_has_playable_streams, timeout=12.0)
 
 
 def _normalize_comment(comment: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -1834,7 +1857,7 @@ def _normalize_comment(comment: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
     item["content"] = item.get("content") or text
     item["text"] = item.get("text") or text
-    item["contentHtml"] = item.get("contentHtml") or text.replace("\n", "<br>")
+    item["contentHtml"] = _html.escape(text).replace("\n", "<br>")
 
     published = (
         item.get("publishedTime")
@@ -1895,7 +1918,7 @@ def normalize_sennin_comments(data: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "authorThumbnail": author_icon,
                 "authorThumbnails": ([{"url": author_icon}] if author_icon else []),
                 "content": text,
-                "contentHtml": text.replace("\n", "<br>"),
+                "contentHtml": _html.escape(text).replace("\n", "<br>"),
                 "publishedTime": comment.get("publishedTime", ""),
                 "publishedText": comment.get("publishedTime", ""),
                 "likeCount": likes.get("count", 0),
@@ -1939,58 +1962,112 @@ def process_comments(comment_data: Any) -> List[Dict[str, Any]]:
     return result
 
 
+def _has_comments(data: Any) -> bool:
+    if isinstance(data, dict):
+        return bool(data.get("comments"))
+    if isinstance(data, list):
+        return len(data) > 0
+    return False
+
+
+async def _get_json(url: str, params: Optional[Dict[str, Any]] = None, timeout: float = 5.0) -> Optional[Any]:
+    try:
+        client = await get_client()
+        response = await client.get(
+            url,
+            params=params,
+            timeout=timeout,
+            headers={"User-Agent": DEFAULT_UA},
+        )
+        if response.status_code != 200:
+            return None
+        return response.json()
+    except Exception as exc:
+        logger.debug("GET %s failed: %s", url, exc)
+        return None
+
+
+async def _comments_from_invidious(video_id: str, force_instance: Optional[str], sort: str) -> Optional[List[Dict[str, Any]]]:
+    sort_by = "new" if sort == "new" else "top"
+    result = await proxy_parallel(
+        "comments",
+        f"/api/v1/comments/{video_id}?sort_by={sort_by}",
+        override_instances=([force_instance] if force_instance else None),
+        accept=_has_comments,
+        accept_tag="nonempty",
+    )
+    data = result.get("data") if isinstance(result, dict) else None
+    comments = process_comments(data)
+    return comments or None
+
+
+async def _comments_from_sennin(video_id: str, sort: str) -> Optional[List[Dict[str, Any]]]:
+    # 1) 専用のコメントAPI(success フラグ付き)
+    data = await _get_json(
+        f"{_SENNIN_BASE_URL}/api/comments",
+        params={"videoId": video_id, "sort": sort},
+        timeout=5.0,
+    )
+    if isinstance(data, dict) and data.get("success") is True:
+        comments = normalize_sennin_comments(data)
+        if comments:
+            return comments
+
+    # 2) 互換: 動画APIのレスポンスに含まれる comments
+    data = await _get_json(f"{_SENNIN_BASE_URL}/api/video/{video_id}", timeout=5.0)
+    if isinstance(data, dict):
+        comments = normalize_sennin_comments(data)
+        if comments:
+            return comments
+    return None
+
+
+async def _comments_from_sia(video_id: str) -> Optional[List[Dict[str, Any]]]:
+    data = await _get_json(
+        f"{_SIA_BASE_URL}/api/comments",
+        params={"videoId": video_id},
+        timeout=5.0,
+    )
+    comments = process_comments(data)
+    return comments or None
+
+
 async def fetch_comments(
     video_id: str,
     force_instance: Optional[str] = None,
     api: Optional[str] = None,
+    sort: str = "top",
 ) -> List[Dict[str, Any]]:
-    cache_key = f"comments:{video_id}:{force_instance or ''}:{api or 'auto'}"
+    """コメントを取得する。複数ソースを並列に当たり、コメントを含む最初の結果を返す。
 
+    以前は「最初に完了したソース」が空・失敗だと残りを待たずに諦めていたため、
+    コメントが取れないことがあった。Sennin は動画APIではなく /api/comments を使う。
+    """
+    cache_key = f"comments:{video_id}:{force_instance or ''}:{api or 'auto'}:{sort}"
     cached = await _cache_get(cache_key)
     if cached is not None:
         return cached
 
     if api == "sennin":
-        try:
-            client = await get_client()
+        factories = [lambda: _comments_from_sennin(video_id, sort)]
+    elif api == "sia":
+        factories = [lambda: _comments_from_sia(video_id)]
+    elif api == "invidious":
+        factories = [lambda: _comments_from_invidious(video_id, force_instance, sort)]
+    else:
+        factories = [
+            lambda: _comments_from_invidious(video_id, force_instance, sort),
+            lambda: _comments_from_sennin(video_id, sort),
+            lambda: _comments_from_sia(video_id),
+        ]
 
-            response = await client.get(
-                f"{_SENNIN_BASE_URL}/api/video/{video_id}",
-                timeout=5.0,
-                headers={"User-Agent": DEFAULT_UA},
-            )
+    comments = await race_first(factories, accept=bool, timeout=9.0)
+    if comments:
+        await _cache_set(cache_key, comments, CACHE_CONFIG["comments"])
+        return comments
 
-            if response.status_code == 200:
-                data = response.json()
-                comments = normalize_sennin_comments(data)
-
-                if comments:
-                    await _cache_set(cache_key, comments, CACHE_CONFIG["comments"])
-                    return comments
-
-        except Exception as exc:
-            logger.debug("Sennin comments failed: %s", exc)
-
-        return []
-
-    try:
-        result = await proxy_parallel(
-            "comments",
-            f"/api/v1/comments/{video_id}",
-            override_instances=([force_instance] if force_instance else None),
-        )
-
-        data = result.get("data") if isinstance(result, dict) else result
-
-        comments = process_comments(data)
-
-        if comments:
-            await _cache_set(cache_key, comments, CACHE_CONFIG["comments"])
-            return comments
-
-    except Exception as exc:
-        logger.debug("Invidious comments failed: %s", exc)
-
+    # 無効化されたコメント・一時的な失敗のどちらも、短時間は再問い合わせしない
+    await _cache_set(cache_key, [], 45.0)
     return []
 
 
@@ -2045,30 +2122,51 @@ def _is_piped_proxy_url_allowed(url: str) -> bool:
     return hostname.endswith(allowed_suffixes)
 
 
+_URI_ATTR_RE = re.compile(r'URI="([^"]+)"')
+
+
 def _rewrite_hls_manifest(body: str, base_url: str) -> str:
-    lines = body.splitlines()
+    """HLSマニフェストのURLをすべて /proxy/piped-stream 経由に書き換える。
+
+    以前は #EXT-X-KEY / #EXT-X-MEDIA しか書き換えず、fMP4 の #EXT-X-MAP(初期化セグメント)や
+    #EXT-X-PART などが直接URLのままになり、そこで再生が止まっていた。
+    """
     output = []
 
-    for line in lines:
+    def proxied(original: str) -> str:
+        return "/proxy/piped-stream?url=" + quote(urljoin(base_url, original), safe="")
+
+    for line in body.splitlines():
         stripped = line.strip()
 
-        if not stripped or stripped.startswith("#"):
-            if stripped.startswith("#EXT-X-KEY") or stripped.startswith("#EXT-X-MEDIA"):
-
-                def replace_uri(match):
-                    original = match.group(1)
-                    absolute = urljoin(base_url, original)
-                    return 'URI="/proxy/piped-stream?url=' + quote(absolute) + '"'
-
-                line = re.sub(r'URI="([^"]+)"', replace_uri, line)
-
+        if not stripped:
             output.append(line)
             continue
 
-        absolute = urljoin(base_url, stripped)
-        output.append("/proxy/piped-stream?url=" + quote(absolute))
+        if stripped.startswith("#"):
+            if 'URI="' in stripped:
+                line = _URI_ATTR_RE.sub(lambda m: 'URI="' + proxied(m.group(1)) + '"', stripped)
+            output.append(line)
+            continue
+
+        output.append(proxied(stripped))
 
     return "\n".join(output) + "\n"
+
+
+_media_client: Optional[httpx.AsyncClient] = None
+
+
+def _get_media_client() -> httpx.AsyncClient:
+    """メディア中継用の共有クライアント(リクエストごとに作り直すと接続確立のコストが毎回かかる)。"""
+    global _media_client
+    if _media_client is None or _media_client.is_closed:
+        _media_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=8.0, read=60.0, write=10.0, pool=5.0),
+            limits=httpx.Limits(max_keepalive_connections=50, keepalive_expiry=60.0),
+            follow_redirects=True,
+        )
+    return _media_client
 
 
 @router.get("/proxy/piped-stream")
@@ -2076,52 +2174,38 @@ async def proxy_piped_stream(url: str, request: Request):
     if not _is_piped_proxy_url_allowed(url):
         return JSONResponse({"error": "不正なURL"}, status_code=400)
 
-    request_headers = {}
-
-    range_header = request.headers.get("range")
-    if range_header:
-        request_headers["Range"] = range_header
-
-    client = httpx.AsyncClient(
-        timeout=httpx.Timeout(connect=10.0, read=90.0, write=10.0, pool=5.0),
-        follow_redirects=True,
-    )
-
+    client = _get_media_client()
     is_manifest = ".m3u8" in url or "/manifest/hls_" in url
 
     if is_manifest:
         try:
-            response = await client.get(url, headers=request_headers)
-
-            content_type = response.headers.get(
-                "content-type", "application/vnd.apple.mpegurl"
-            )
-
-            rewritten = _rewrite_hls_manifest(response.text, str(response.url))
-
-            return PlainTextResponse(
-                rewritten,
-                status_code=response.status_code,
-                media_type=content_type,
-                headers={"cache-control": "no-cache"},
-            )
-
+            response = await client.get(url)
         except Exception as exc:
             return JSONResponse({"error": str(exc)}, status_code=502)
 
-        finally:
-            await client.aclose()
+        if response.status_code != 200:
+            return JSONResponse({"error": f"upstream {response.status_code}"}, status_code=502)
+
+        rewritten = _rewrite_hls_manifest(response.text, str(response.url))
+        return PlainTextResponse(
+            rewritten,
+            status_code=200,
+            media_type="application/vnd.apple.mpegurl",
+            headers={"cache-control": "no-cache"},
+        )
+
+    request_headers = {}
+    range_header = request.headers.get("range")
+    if range_header:
+        request_headers["Range"] = range_header
 
     try:
-        request_obj = client.build_request("GET", url, headers=request_headers)
-        response = await client.send(request_obj, stream=True)
-
+        upstream = client.build_request("GET", url, headers=request_headers)
+        response = await client.send(upstream, stream=True)
     except Exception as exc:
-        await client.aclose()
         return JSONResponse({"error": str(exc)}, status_code=502)
 
     forwarded = {}
-
     for header in (
         "content-type",
         "content-length",
@@ -2131,7 +2215,6 @@ async def proxy_piped_stream(url: str, request: Request):
     ):
         if header in response.headers:
             forwarded[header] = response.headers[header]
-
     forwarded.setdefault("accept-ranges", "bytes")
 
     async def generate():
@@ -2140,7 +2223,6 @@ async def proxy_piped_stream(url: str, request: Request):
                 yield chunk
         finally:
             await response.aclose()
-            await client.aclose()
 
     return StreamingResponse(
         generate(),
@@ -2264,7 +2346,7 @@ async def shorts_player(
         video_urls = s_data.get("videoUrls", [])
 
         if not video_urls and v_data:
-            fallback = _normalize_invidious_streams(v_data)
+            fallback = _normalize_invidious_streams(v_data, base=v_data.get("_instance", ""))
             video_urls = fallback.get("videoUrls", [])
 
         comments = process_comments(comment_data)
@@ -2312,6 +2394,65 @@ async def shorts_player(
         )
 
 
+_VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{6,20}$")
+
+
+@router.get("/api/comments/{video_id}")
+async def api_comments(
+    video_id: str,
+    sort: str = Query("top"),
+    force_instance: Optional[str] = Query(None),
+    api: Optional[str] = Query(None),
+):
+    if not _VIDEO_ID_RE.match(video_id):
+        return JSONResponse({"comments": [], "count": 0, "error": "invalid id"}, status_code=400)
+
+    sort = "new" if sort == "new" else "top"
+    comments = await fetch_comments(video_id, force_instance=force_instance, api=api, sort=sort)
+    return JSONResponse(
+        {"comments": comments, "count": len(comments)},
+        headers={"Cache-Control": "public, max-age=60"},
+    )
+
+
+def _proxify_candidate(item: Dict[str, Any]) -> Dict[str, Any]:
+    """googlevideo 直リンクは取得元IPに紐づくため、許可ホストだけ中継経由に変える。"""
+    out = dict(item)
+    for key in ("url", "audioUrl"):
+        u = out.get(key) or ""
+        if u and not u.startswith("/") and _is_piped_proxy_url_allowed(u):
+            out[key] = "/proxy/piped-stream?url=" + quote(u, safe="")
+    return out
+
+
+@router.get("/api/streams/{video_id}")
+async def api_streams(
+    video_id: str,
+    refresh: int = Query(0),
+    proxy: int = Query(0),
+    api: Optional[str] = Query(None),
+):
+    if not _VIDEO_ID_RE.match(video_id):
+        return JSONResponse({"streamUrls": [], "videoUrls": [], "error": "invalid id"}, status_code=400)
+
+    if refresh:
+        await _cache_delete(f"streams:{video_id}::{api or 'auto'}")
+
+    data = await fetch_fastest_stream_urls(video_id, api=api)
+    candidates = list(data.get("streamUrls") or [])
+    if proxy:
+        candidates = [_proxify_candidate(c) for c in candidates]
+
+    return JSONResponse(
+        {
+            "streamUrls": candidates,
+            "videoUrls": [c.get("url") for c in candidates if c.get("url")],
+            "stream_api_used": data.get("stream_api_used", "unknown"),
+        },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @router.get("/watch", response_class=HTMLResponse)
 async def watch(
     request: Request,
@@ -2334,18 +2475,24 @@ async def watch(
                 v, api=resolved_stream_api, force_instance=force_instance
             )
         )
-        comment_task = asyncio.create_task(
-            fetch_comments(v, force_instance=force_instance, api=resolved_info_api)
-        )
         playlist_task = asyncio.create_task(
             _fetch_playlist(playlist_id, force_instance)
         )
 
-        # nocookie 埋め込みで再生できるので、最大 PAGE_WAIT_SECONDS 待ったら
-        # 取れている情報だけでページを表示する
-        video_data, stream_data, comment_data, playlist_data = await _wait_for_results(
-            [video_task, stream_task, comment_task, playlist_task]
+        # コメントは描画後に /api/comments/{id} で非同期取得する(ここでは待たない)。
+        # 動画情報・ストリームは最大 STREAM_WAIT_SECONDS 待ち、取れた分でページを描画する。
+        # プレイリストは描画を遅らせない: 動画・ストリームだけを待ち、プレイリストは間に合った場合のみ使う
+        video_data, stream_data = await _wait_for_results(
+            [video_task, stream_task],
+            timeout=STREAM_WAIT_SECONDS,
         )
+        playlist_data = (
+            playlist_task.result()
+            if playlist_task.done() and not playlist_task.cancelled() and playlist_task.exception() is None
+            else None
+        )
+        if not playlist_task.done():
+            playlist_task.add_done_callback(lambda t: t.cancelled() or t.exception())
 
         v_data = video_data if isinstance(video_data, dict) else {}
         s_data = stream_data if isinstance(stream_data, dict) else {}
@@ -2368,7 +2515,7 @@ async def watch(
         video_urls = s_data.get("videoUrls", [])
 
         if not stream_urls and v_data:
-            fallback = _normalize_invidious_streams(v_data)
+            fallback = _normalize_invidious_streams(v_data, base=v_data.get("_instance", ""))
             stream_urls = fallback.get("streamUrls", [])
             video_urls = fallback.get("videoUrls", [])
 
@@ -2398,7 +2545,7 @@ async def watch(
                 if isinstance(last, dict):
                     author_icon = last.get("url", "")
 
-        formatted_comments = process_comments(comment_data)
+        formatted_comments: List[Dict[str, Any]] = []
 
         info_api_used = v_data.get("api_used") or v_data.get("_source") or "unknown"
         stream_api_used = s_data.get("stream_api_used") or "unknown"

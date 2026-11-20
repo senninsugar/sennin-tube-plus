@@ -3,912 +3,655 @@
 {% block title %}{{ video_title if video_title else "読み込み中..." }} - YouTube{% endblock %}
 
 {% block extra_css %}
+<script id="hls-js" src="https://cdn.jsdelivr.net/npm/hls.js@1.7.4/dist/hls.min.js" defer></script>
+<style>
+    [hidden] { display: none !important; }
 
-<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>  <style>
-    :root {
-        --yt-spec-base-background: #0f0f0f;
-        --yt-spec-static-overlay-background-solid: #212121;
-        --yt-spec-badge-chip-background: rgba(255, 255, 255, 0.1);
-        --yt-spec-button-chip-hover: rgba(255, 255, 255, 0.2);
-        --yt-spec-text-primary: #f1f1f1;
-        --yt-spec-text-secondary: #aaaaaa;
-        --yt-spec-brand-subscribe-bg: #f1f1f1;
-        --yt-spec-brand-subscribe-text: #0f0f0f;
-        --yt-spec-border-color: rgba(255, 255, 255, 0.1);
-        --yt-brand-red: #ff0000;
-        --yt-font-family: "Roboto", "Arial", sans-serif;
-        --yt-skeleton-bg: linear-gradient(90deg, rgba(255,255,255,0.06) 25%, rgba(255,255,255,0.12) 37%, rgba(255,255,255,0.06) 63%);
-        --yt-cp-bg: #181818;
-        --yt-cp-card-bg: #272727;
-        --yt-cp-btn-bg: #3f3f3f;
-        --yt-cp-btn-hover: #555555;
-        --yt-cp-border: rgba(255, 255, 255, 0.1);
-        --yt-alert-bg: rgba(24, 24, 27, 0.95);
-        --yt-alert-error-bg: rgba(45, 18, 18, 0.95);
-    }
-
-    @media (prefers-color-scheme: light) {
-        :root {
-            --yt-spec-base-background: #ffffff;
-            --yt-spec-static-overlay-background-solid: #ffffff;
-            --yt-spec-badge-chip-background: rgba(0, 0, 0, 0.05);
-            --yt-spec-button-chip-hover: rgba(0, 0, 0, 0.1);
-            --yt-spec-text-primary: #0f0f0f;
-            --yt-spec-text-secondary: #606060;
-            --yt-spec-brand-subscribe-bg: #0f0f0f;
-            --yt-spec-brand-subscribe-text: #ffffff;
-            --yt-spec-border-color: #e5e5e5;
-            --yt-skeleton-bg: linear-gradient(90deg, rgba(0,0,0,0.06) 25%, rgba(0,0,0,0.12) 37%, rgba(0,0,0,0.06) 63%);
-            --yt-cp-bg: #ffffff;
-            --yt-cp-card-bg: #f2f2f2;
-            --yt-cp-btn-bg: #e5e5e5;
-            --yt-cp-btn-hover: #d9d9d9;
-            --yt-cp-border: #e5e5e5;
-            --yt-alert-bg: rgba(255, 255, 255, 0.95);
-            --yt-alert-error-bg: rgba(255, 235, 235, 0.95);
-        }
-    }
-
-    body {
-        background-color: var(--yt-spec-base-background);
-        color: var(--yt-spec-text-primary);
-        font-family: var(--yt-font-family);
-        margin: 0;
-        padding: 0;
-        -webkit-font-smoothing: antialiased;
-    }
-
+    /* Page shell: player is full-bleed on phones, the rest gets 16px gutters */
+    #yt-main { animation: none !important; }
     .yt-watch-page-container {
         display: grid;
-        grid-template-columns: minmax(0, 1fr) 360px;
-        gap: 8px;
+        grid-template-columns: minmax(0, 1fr) 402px;
+        gap: 24px;
         max-width: 1754px;
         margin: 0 auto;
-        padding: 0 12px 0 12px;
-        box-sizing: border-box;
+        align-items: start;
     }
+    .yt-primary-column, .yt-secondary-column { min-width: 0; }
+    .yt-secondary-column { display: flex; flex-direction: column; gap: 10px; }
 
     @media (max-width: 1200px) {
-        .yt-watch-page-container {
-            grid-template-columns: minmax(0, 1fr) 320px;
-            gap: 8px;
-            padding: 0 8px 0 8px;
-        }
+        .yt-watch-page-container { grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; }
     }
-
     @media (max-width: 1010px) {
-        .yt-watch-page-container {
-            grid-template-columns: 1fr;
-            padding: 0;
-        }
+        .yt-watch-page-container { grid-template-columns: 1fr; gap: 0; }
+        .yt-secondary-column { margin-top: 24px; }
+    }
+    @media (max-width: 792px) {
+        #yt-main, #yt-main.expanded { padding: 0 !important; }
+        .yt-primary-info, .yt-secondary-column { padding-left: 16px; padding-right: 16px; }
     }
 
-    .yt-primary-column {
-        width: 100%;
-        min-width: 0;
-    }
-
+    /* ---- Player ---- */
     #player-wrapper {
         position: relative;
         width: 100%;
         aspect-ratio: 16 / 9;
         background: #000;
-        border-radius: 12px;
+        border-radius: var(--radius-lg);
         overflow: hidden;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+        box-shadow: var(--shadow-md);
     }
-
     @media (max-width: 1010px) {
-        #player-wrapper {
-            border-radius: 0;
-        }
+        #player-wrapper { border-radius: 0; box-shadow: none; }
     }
-
-    video, iframe {
-        width: 100%;
-        height: 100%;
-        border: none;
-        outline: none;
-        display: block;
-    }
+    video, iframe { width: 100%; height: 100%; border: none; outline: none; display: block; }
 
     .loader-overlay {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.7);
+        position: absolute; inset: 0;
+        background: rgba(0, 0, 0, 0.45);
         display: none;
-        align-items: center;
-        justify-content: center;
+        align-items: center; justify-content: center;
         z-index: 10;
-        backdrop-filter: blur(2px);
+        pointer-events: none;
     }
-
+    .loader-overlay.visible { display: flex; }
     .yt-spinner {
-        width: 48px;
-        height: 48px;
-        border: 4px solid rgba(255, 255, 255, 0.2);
+        width: 44px; height: 44px;
+        border: 4px solid rgba(255, 255, 255, 0.25);
+        border-top-color: #fff;
         border-radius: 50%;
-        border-top-color: #ffffff;
-        animation: yt-spin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+        animation: yt-spin 0.8s linear infinite;
     }
-
     @keyframes yt-spin { to { transform: rotate(360deg); } }
 
+    .player-error {
+        position: absolute; inset: 0; z-index: 12;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        gap: var(--space-2);
+        padding: var(--space-5);
+        text-align: center;
+        color: #f5f5f5;
+        background: rgba(12, 12, 12, 0.94);
+    }
+    .player-error-icon { font-size: 28px; color: #ff7a7a; }
+    .player-error-title { margin: 0; font-size: 1rem; font-weight: 700; }
+    .player-error-text { margin: 0; max-width: 420px; font-size: 0.85rem; line-height: 1.6; color: #c4c4c4; }
+    .player-error-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-2); margin-top: var(--space-1); }
+
+    /* ---- Title and owner row ---- */
     .yt-video-title {
         font-size: 1.25rem;
         font-weight: 700;
-        line-height: 1.35;
-        margin: 12px 0 8px 0;
-        color: var(--yt-spec-text-primary);
+        line-height: 1.4;
+        letter-spacing: -0.01em;
+        margin: var(--space-4) 0 var(--space-3);
+        color: var(--text);
         word-break: break-word;
-        letter-spacing: -0.2px;
         text-align: left;
     }
-
-    @media (max-width: 1010px) {
-        .yt-video-title, .yt-owner-actions-row, .yt-description-container, .yt-comments-container {
-            padding-left: 12px;
-            padding-right: 12px;
-        }
-    }
-
     .yt-owner-actions-row {
         display: flex;
         justify-content: space-between;
         align-items: center;
         flex-wrap: wrap;
-        gap: 12px;
-        margin-bottom: 12px;
+        gap: var(--space-3) var(--space-4);
+        margin-bottom: var(--space-4);
     }
-
-    .yt-owner-info {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-    }
-
+    .yt-owner-info { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
     .yt-channel-avatar-link {
-        display: block;
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        overflow: hidden;
-        flex-shrink: 0;
-        background-color: var(--yt-spec-border-color);
+        display: block; width: 40px; height: 40px;
+        border-radius: 50%; overflow: hidden; flex-shrink: 0;
+        background-color: var(--chip);
     }
-
-    .yt-channel-avatar-link img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-    }
-
-    .yt-channel-text {
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        text-align: left;
-    }
-
+    .yt-channel-avatar-link img { width: 100%; height: 100%; object-fit: cover; }
+    .yt-channel-text { display: flex; flex-direction: column; justify-content: center; min-width: 0; text-align: left; }
     .yt-channel-name {
-        font-size: 1rem;
-        font-weight: 600;
-        color: var(--yt-spec-text-primary);
-        text-decoration: none;
-        line-height: 1.2;
+        font-size: 0.95rem; font-weight: 600; line-height: 1.25;
+        color: var(--text); text-decoration: none;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
-
-    .yt-channel-subscribers {
-        font-size: 0.75rem;
-        color: var(--yt-spec-text-secondary);
-        margin-top: 2px;
-    }
+    .yt-channel-name:hover { text-decoration: underline; }
+    .yt-channel-subscribers { font-size: 0.75rem; color: var(--text-secondary); margin-top: 2px; }
 
     .yt-subscribe-btn {
-        background-color: var(--yt-spec-brand-subscribe-bg);
-        color: var(--yt-spec-brand-subscribe-text);
-        font-size: 0.875rem;
-        font-weight: 600;
-        padding: 0 16px;
-        height: 36px;
-        border-radius: 18px;
-        border: none;
-        cursor: pointer;
-        margin-left: 12px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        transition: background-color 0.2s, opacity 0.2s;
+        height: 36px; padding: 0 var(--space-4);
+        margin-left: var(--space-1);
+        border: none; border-radius: var(--radius-pill);
+        background: var(--text); color: var(--surface);
+        font: inherit; font-size: 0.875rem; font-weight: 600;
+        cursor: pointer; white-space: nowrap;
+        transition: opacity 0.15s, transform 0.08s, background-color 0.15s, color 0.15s;
     }
+    .yt-subscribe-btn:hover { opacity: 0.88; }
+    .yt-subscribe-btn:active { transform: scale(0.97); }
+    .yt-subscribe-btn.is-subscribed { background: var(--chip); color: var(--text); }
 
-    .yt-subscribe-btn:hover {
-        opacity: 0.9;
-    }
-
-    .yt-actions-group {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        flex-wrap: wrap;
-    }
-
+    .yt-actions-group { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
     .yt-like-dislike-group {
-        display: inline-flex;
-        align-items: center;
-        height: 36px;
-        border-radius: 18px;
-        background-color: var(--yt-spec-badge-chip-background);
-        overflow: hidden;
+        display: inline-flex; align-items: center; height: 36px;
+        border-radius: var(--radius-pill); background: var(--chip); overflow: hidden;
     }
-
     .yt-like-btn, .yt-dislike-btn {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        height: 100%;
-        padding: 0 16px;
-        background: transparent;
-        color: var(--yt-spec-text-primary);
-        font-size: 0.875rem;
-        font-weight: 500;
-        border: none;
-        cursor: pointer;
-        transition: background-color 0.2s;
+        display: inline-flex; align-items: center; gap: 6px; height: 100%;
+        padding: 0 var(--space-4);
+        background: transparent; color: var(--text);
+        font: inherit; font-size: 0.875rem; font-weight: 500;
+        border: none; cursor: pointer;
+        transition: background-color 0.15s;
     }
-
-    .yt-like-btn:hover, .yt-dislike-btn:hover {
-        background-color: var(--yt-spec-button-chip-hover);
-    }
-
-    .yt-like-dislike-divider {
-        width: 1px;
-        height: 20px;
-        background-color: var(--yt-spec-border-color);
-    }
+    .yt-like-btn:hover, .yt-dislike-btn:hover { background-color: var(--active); }
+    .yt-like-dislike-divider { width: 1px; height: 20px; background-color: var(--border); }
 
     .yt-pill-button {
-        display: inline-flex;
-        align-items: center;
-        gap: 6px;
-        height: 36px;
-        padding: 0 16px;
-        border-radius: 18px;
-        background-color: var(--yt-spec-badge-chip-background);
-        color: var(--yt-spec-text-primary);
-        font-size: 0.875rem;
-        font-weight: 500;
-        border: none;
-        cursor: pointer;
-        text-decoration: none;
-        transition: background-color 0.2s;
-        box-sizing: border-box;
-        white-space: nowrap;
+        display: inline-flex; align-items: center; gap: 6px;
+        height: 36px; padding: 0 var(--space-4);
+        border: 1px solid transparent; border-radius: var(--radius-pill);
+        background: var(--chip); color: var(--text);
+        font: inherit; font-size: 0.875rem; font-weight: 500;
+        cursor: pointer; text-decoration: none; white-space: nowrap;
+        transition: background-color 0.15s, transform 0.08s, opacity 0.15s;
+    }
+    .yt-pill-button:hover { background-color: var(--active); }
+    .yt-pill-button:active { transform: scale(0.97); }
+    .yt-pill-button.is-primary { background: var(--text); color: var(--surface); }
+    .yt-pill-button.is-primary:hover { opacity: 0.88; background-color: var(--text); }
+    .yt-chevron { font-size: 0.7rem; margin-left: 2px; opacity: 0.8; }
+
+    /* ---- Dropdowns ---- */
+    .yt-custom-select { position: relative; display: inline-block; }
+    .yt-select-dropdown {
+        position: absolute; top: calc(100% + 8px); right: 0;
+        min-width: 240px; max-height: 320px; overflow-y: auto;
+        display: none; flex-direction: column; gap: 2px;
+        padding: 6px;
+        background: var(--surface-overlay);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-lg);
+        z-index: 500;
+    }
+    .yt-custom-select.open .yt-select-dropdown {
+        display: flex;
+        animation: cpFadeIn 0.2s ease-out both;
+    }
+    .yt-dropdown-item {
+        display: flex; align-items: center; justify-content: space-between; gap: 12px;
+        padding: 9px 12px;
+        border-radius: var(--radius-sm);
+        font-size: 0.85rem; color: var(--text);
+        cursor: pointer; text-align: left;
+        transition: background-color 0.15s;
+    }
+    .yt-dropdown-item:hover { background: var(--hover); }
+    .yt-dropdown-item.selected { font-weight: 600; }
+    .yt-dropdown-item.selected::after {
+        content: "\f00c";
+        font-family: "Font Awesome 6 Free";
+        font-weight: 900;
+        font-size: 0.75rem;
+        color: var(--accent);
+    }
+    .yt-dropdown-section { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: left; }
+    .yt-dropdown-section:last-child { border-bottom: none; }
+    .yt-dropdown-label {
+        font-size: 0.7rem; font-weight: 600; color: var(--text-secondary);
+        text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;
+    }
+    .yt-dropdown-value { font-size: 0.8rem; color: var(--text); word-break: break-all; }
+    .yt-dropdown-note { font-size: 0.7rem; color: var(--text-secondary); margin-top: 2px; }
+
+    @media (max-width: 792px) {
+        /* On phones a dropdown becomes a bottom sheet so it never leaves the viewport */
+        .yt-custom-select .yt-select-dropdown {
+            position: fixed; top: auto; right: 16px; left: 16px; bottom: 16px;
+            max-height: 60vh; min-width: 0;
+        }
     }
 
-    .yt-pill-button:hover {
-        background-color: var(--yt-spec-button-chip-hover);
-    }
-
+    /* ---- Description ---- */
     .yt-description-container {
-        background-color: var(--yt-spec-badge-chip-background);
-        border-radius: 12px;
-        padding: 12px;
-        font-size: 0.875rem;
-        line-height: 1.5;
-        color: var(--yt-spec-text-primary);
-        transition: background-color 0.2s;
-        margin-bottom: 24px;
+        background: var(--surface-raised);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: var(--space-3) var(--space-4);
+        font-size: 0.9rem; line-height: 1.6;
+        color: var(--text);
         text-align: left;
+        margin-bottom: var(--space-5);
+        transition: background-color 0.15s;
     }
-
-    .yt-description-container:hover {
-        background-color: var(--yt-spec-button-chip-hover);
-    }
-
+    .yt-description-container:hover { background: var(--chip); }
     .yt-description-container.collapsed .yt-description-body {
         display: -webkit-box;
         -webkit-line-clamp: 3;
         -webkit-box-orient: vertical;
         overflow: hidden;
     }
-
-    .yt-description-toggle-btn {
-        background: none;
-        border: none;
-        color: var(--yt-spec-text-primary);
-        font-weight: 700;
-        cursor: pointer;
-        padding: 0;
-        margin-top: 8px;
-        font-size: 0.875rem;
-        display: inline-block;
-    }
-
     .yt-description-header {
-        font-weight: 600;
-        margin-bottom: 6px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 12px;
-        text-align: left;
-        flex-wrap: wrap;
+        font-weight: 600; margin-bottom: var(--space-2);
+        display: flex; justify-content: space-between; align-items: center;
+        gap: var(--space-2) var(--space-3); flex-wrap: wrap;
     }
-
+    .yt-api-badges { display: flex; gap: var(--space-2); flex-wrap: wrap; }
     .yt-api-badge {
-        font-size: 0.75rem;
-        color: var(--yt-spec-text-secondary);
-        background: rgba(255, 255, 255, 0.08);
-        padding: 2px 8px;
-        border-radius: 4px;
-        border: 1px solid var(--yt-spec-border-color);
+        font-size: 0.72rem; font-weight: 500; color: var(--text-secondary);
+        background: var(--surface); border: 1px solid var(--border);
+        padding: 2px 10px; border-radius: var(--radius-pill);
     }
-
-    .yt-description-body {
-        white-space: pre-wrap;
-        word-break: break-word;
-        text-align: left;
-        margin: 0;
-        padding: 0;
+    .yt-description-body { white-space: pre-wrap; word-break: break-word; margin: 0; padding: 0; }
+    .yt-description-toggle-btn {
+        background: none; border: none; padding: 0; margin-top: var(--space-2);
+        color: var(--text); font: inherit; font-size: 0.875rem; font-weight: 600;
+        cursor: pointer;
     }
+    .yt-description-toggle-btn:hover { text-decoration: underline; }
 
+    /* ---- Skeletons ---- */
     .skeleton-box {
-        background: var(--yt-skeleton-bg);
+        background: var(--skeleton);
         background-size: 400% 100%;
-        animation: skeleton-shimmer 1.5s ease-in-out infinite;
+        animation: skeleton-shimmer 1.4s ease-in-out infinite;
         border-radius: 6px;
     }
-
     @keyframes skeleton-shimmer {
         0% { background-position: 100% 0; }
         100% { background-position: -100% 0; }
     }
-
-    .skeleton-text {
-        height: 14px;
-        margin-bottom: 6px;
-        border-radius: 4px;
+    .skeleton-text { height: 14px; margin-bottom: 6px; border-radius: 4px; }
+    .skel-title { width: 75%; height: 24px; display: block; }
+    @media (prefers-reduced-motion: reduce) {
+        .skeleton-box, .yt-spinner { animation: none; }
     }
 
-    .yt-recommend-skeleton-card {
-        display: flex;
-        gap: 8px;
-        padding: 4px;
-        margin-bottom: 8px;
+    /* ---- Comments ---- */
+    .yt-comments-container { margin-top: var(--space-2); text-align: left; }
+    .yt-comments-header {
+        display: flex; align-items: baseline; justify-content: space-between;
+        font-weight: 700; font-size: 1.05rem; margin-bottom: var(--space-4);
     }
-
-    .yt-recommend-skeleton-thumb {
-        width: 168px;
-        aspect-ratio: 16 / 9;
-        border-radius: 8px;
-        flex-shrink: 0;
+    #comment-list { display: flex; flex-direction: column; gap: var(--space-3); }
+    .yt-comment-item {
+        display: flex; gap: 12px;
+        padding: 12px 14px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: var(--surface-raised);
     }
-
-    .yt-recommend-skeleton-info {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
+    .yt-comment-avatar {
+        width: 36px; height: 36px; border-radius: 50%;
+        flex-shrink: 0; object-fit: cover;
+        background: var(--chip);
     }
-
-    .yt-secondary-column {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
+    .yt-comment-avatar-fallback {
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: 0.9rem; font-weight: 600; color: var(--text-secondary);
     }
+    .yt-comment-body { min-width: 0; flex: 1; }
+    .yt-comment-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; font-size: 0.8rem; }
+    .yt-comment-author { font-weight: 600; color: var(--text); }
+    .yt-comment-time { color: var(--text-secondary); font-size: 0.75rem; }
+    .yt-comment-text {
+        margin-top: 6px;
+        font-size: 0.9rem; line-height: 1.55;
+        color: var(--text);
+        white-space: pre-line;
+        word-break: break-word;
+    }
+    .yt-comment-foot {
+        display: flex; gap: 14px; align-items: center;
+        margin-top: 8px; font-size: 0.78rem; color: var(--text-secondary);
+    }
+    .yt-comment-foot span { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
+    .yt-comment-skeleton .skeleton-box { display: block; }
+    .yt-comment-skel-avatar { width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0; }
+    .yt-comment-state {
+        display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2);
+        padding: var(--space-4);
+        border: 1px dashed var(--border); border-radius: var(--radius-md);
+        color: var(--text-secondary); font-size: 0.9rem;
+    }
+    .yt-comment-state p { margin: 0; }
 
+    /* ---- Recommendations and playlist ---- */
     .yt-recommend-card {
-        display: flex;
-        gap: 8px;
-        text-decoration: none;
-        color: inherit;
-        border-radius: 8px;
-        padding: 4px;
+        display: flex; gap: 10px;
+        text-decoration: none; color: inherit;
+        padding: 6px; border-radius: var(--radius-md);
         transition: background-color 0.15s ease;
     }
-
-    .yt-recommend-card:hover {
-        background-color: var(--yt-spec-button-chip-hover);
-    }
-
+    .yt-recommend-card:hover { background-color: var(--hover); }
     .yt-recommend-thumb-wrapper {
-        position: relative;
-        width: 168px;
-        aspect-ratio: 16 / 9;
-        border-radius: 8px;
-        overflow: hidden;
-        flex-shrink: 0;
+        position: relative; width: 168px; aspect-ratio: 16 / 9;
+        border-radius: 10px; overflow: hidden; flex-shrink: 0;
         background-color: #000;
     }
-
-    .yt-recommend-thumb {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-    }
-
-    .yt-recommend-details {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-        min-width: 0;
-        text-align: left;
-    }
-
+    .yt-recommend-thumb { width: 100%; height: 100%; object-fit: cover; transition: transform 0.25s ease; }
+    .yt-recommend-card:hover .yt-recommend-thumb { transform: scale(1.04); }
+    .yt-recommend-details { display: flex; flex-direction: column; gap: 4px; min-width: 0; text-align: left; }
     .yt-recommend-title {
-        font-size: 0.875rem;
-        font-weight: 500;
-        line-height: 1.3;
-        color: var(--yt-spec-text-primary);
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
+        font-size: 0.875rem; font-weight: 600; line-height: 1.3;
+        color: var(--text);
+        display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
     }
+    .yt-recommend-meta { font-size: 0.75rem; color: var(--text-secondary); line-height: 1.35; }
+    .yt-recommend-skeleton-card { display: flex; gap: 10px; padding: 6px; }
+    .yt-recommend-skeleton-thumb { width: 168px; aspect-ratio: 16 / 9; border-radius: 10px; flex-shrink: 0; }
+    .yt-recommend-skeleton-info { flex: 1; display: flex; flex-direction: column; gap: 6px; }
 
-    .yt-recommend-meta {
-        font-size: 0.75rem;
-        color: var(--yt-spec-text-secondary);
-        line-height: 1.3;
+    .yt-playlist-panel {
+        background: var(--surface-raised);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: 12px;
+        display: flex; flex-direction: column; gap: 6px;
+        max-height: 420px; overflow-y: auto;
     }
-
-    .yt-custom-select {
-        position: relative;
-        display: inline-block;
+    .yt-playlist-panel-header {
+        font-size: 0.9rem; font-weight: 700;
+        padding-bottom: 8px; margin-bottom: 4px;
+        border-bottom: 1px solid var(--border);
+        color: var(--text);
+        display: flex; justify-content: space-between; align-items: center;
     }
-
-    .yt-select-dropdown {
-        position: absolute;
-        top: calc(100% + 6px);
-        right: 0;
-        background: var(--yt-spec-static-overlay-background-solid);
-        border-radius: 12px;
-        border: 1px solid var(--yt-spec-border-color);
-        box-shadow: 0 8px 24px rgba(0,0,0,0.5);
-        display: none;
-        flex-direction: column;
-        min-width: 200px;
-        z-index: 500;
-        overflow: hidden;
+    .yt-playlist-panel-close {
+        cursor: pointer; font-size: 1rem; color: var(--text-secondary);
+        padding: 4px 8px; border-radius: 50%;
+        transition: background-color 0.15s, color 0.15s;
     }
-
-    .yt-custom-select.open .yt-select-dropdown {
-        display: flex;
-        animation: cpFadeIn 0.25s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    .yt-playlist-panel-close:hover { background-color: var(--hover); color: var(--text); }
+    .yt-playlist-panel-item {
+        display: flex; gap: 8px; align-items: center;
+        text-decoration: none; color: inherit;
+        padding: 6px; border-radius: var(--radius-sm);
+        transition: background-color 0.15s ease;
     }
-
-    .yt-dropdown-item {
-        padding: 10px 16px;
-        font-size: 0.85rem;
-        color: var(--yt-spec-text-primary);
-        cursor: pointer;
-        transition: background 0.2s;
-        text-align: left;
+    .yt-playlist-panel-item:hover { background-color: var(--hover); }
+    .yt-playlist-panel-item.active { background-color: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+    .yt-playlist-panel-num { font-size: 0.75rem; color: var(--text-secondary); width: 18px; text-align: center; flex-shrink: 0; }
+    .yt-playlist-panel-thumb-wrapper {
+        width: 80px; aspect-ratio: 16 / 9; border-radius: 6px;
+        overflow: hidden; flex-shrink: 0; background-color: #000;
     }
-
-    .yt-dropdown-item:hover, .yt-dropdown-item.selected {
-        background: var(--yt-spec-button-chip-hover);
+    .yt-playlist-panel-thumb { width: 100%; height: 100%; object-fit: cover; }
+    .yt-playlist-panel-details { display: flex; flex-direction: column; gap: 2px; min-width: 0; text-align: left; }
+    .yt-playlist-panel-title {
+        font-size: 0.8rem; font-weight: 500; line-height: 1.25; color: var(--text);
+        display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
     }
+    .yt-playlist-panel-author { font-size: 0.7rem; color: var(--text-secondary); }
 
-    .yt-dropdown-section {
-        padding: 8px 0;
-        border-bottom: 1px solid var(--yt-spec-border-color);
-        text-align: left;
-    }
-
-    .yt-dropdown-section:last-child {
-        border-bottom: none;
-    }
-
-    .yt-dropdown-label {
-        padding: 6px 16px;
-        font-size: 0.7rem;
-        font-weight: 600;
-        color: var(--yt-spec-text-secondary);
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-
-    .yt-dropdown-value {
-        padding: 6px 16px;
-        font-size: 0.75rem;
-        color: var(--yt-spec-text-primary);
-        word-break: break-all;
-    }
-
+    /* ---- Modals and alerts ---- */
     .yt-modal-overlay {
-        position: fixed;
-        top: 0; left: 0; width: 100%; height: 100%;
-        background: rgba(0, 0, 0, 0.7);
+        position: fixed; inset: 0;
+        background: var(--scrim);
         z-index: 3000;
         display: none;
-        align-items: center;
-        justify-content: center;
+        align-items: center; justify-content: center;
         backdrop-filter: blur(4px);
+        padding: 16px;
     }
-
     .yt-modal-content {
-        background: var(--yt-spec-static-overlay-background-solid);
-        color: var(--yt-spec-text-primary);
-        padding: 24px;
-        border-radius: 12px;
-        max-width: 480px;
-        width: 90%;
+        background: var(--surface-overlay);
+        color: var(--text);
+        padding: var(--space-5);
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--border);
+        max-width: 480px; width: 100%;
         position: relative;
-        box-shadow: 0 12px 32px rgba(0,0,0,0.4);
-        border: 1px solid var(--yt-spec-border-color);
+        box-shadow: var(--shadow-lg);
         text-align: left;
     }
-
+    .yt-modal-title { margin: 0 0 var(--space-4); font-size: 1.1rem; display: flex; align-items: center; gap: 8px; }
+    .yt-modal-title i { color: var(--brand-red); }
     .yt-modal-close {
-        position: absolute;
-        top: 16px;
-        right: 16px;
-        font-size: 1.2rem;
-        cursor: pointer;
-        color: var(--yt-spec-text-secondary);
+        position: absolute; top: 12px; right: 12px;
+        width: 32px; height: 32px; border: none; border-radius: 50%;
+        background: transparent; color: var(--text-secondary);
+        cursor: pointer; display: flex; align-items: center; justify-content: center;
     }
+    .yt-modal-close:hover { background: var(--hover); color: var(--text); }
+    .yt-dl-item {
+        display: flex; justify-content: space-between; align-items: center; gap: 12px;
+        padding: 10px 0; border-bottom: 1px solid var(--border);
+    }
+    .yt-dl-format { color: var(--text-secondary); font-size: 0.8rem; margin-left: 4px; }
+    .yt-dl-btn { height: 32px; padding: 0 12px; font-size: 0.8rem; }
 
     #custom-alert {
-        position: fixed;
-        top: 24px;
-        right: 24px;
-        background: var(--yt-alert-bg);
-        color: var(--yt-spec-text-primary);
-        padding: 18px 24px;
-        border-radius: 16px;
-        box-shadow: 0 16px 36px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.2);
+        position: fixed; top: 24px; right: 24px;
+        display: flex; align-items: center; gap: 10px;
+        max-width: 400px; width: calc(100% - 48px);
+        padding: 14px 20px;
+        background: var(--surface-overlay);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-lg);
+        font-size: 0.95rem; font-weight: 600;
         z-index: 4000;
-        display: block;
-        font-size: 0.98rem;
-        font-weight: 600;
-        border: 1px solid var(--yt-spec-border-color);
-        backdrop-filter: blur(12px);
-        transform: translateY(-20px) scale(0.92);
-        opacity: 0;
-        visibility: hidden;
-        pointer-events: none;
-        transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s ease, visibility 0.3s step-end;
-        touch-action: pan-y;
-        user-select: none;
-        max-width: 400px;
-        width: calc(100% - 48px);
         word-break: break-word;
         box-sizing: border-box;
+        user-select: none; touch-action: pan-y;
+        visibility: hidden; opacity: 0; pointer-events: none;
+        transform: translateY(-20px) scale(0.94);
+        transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.25s ease, visibility 0.3s step-end;
     }
-
     #custom-alert.show {
-        visibility: visible;
-        pointer-events: auto;
-        transform: translateY(0) scale(1);
-        opacity: 1;
-        transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s ease, visibility 0s;
+        visibility: visible; pointer-events: auto;
+        transform: translateY(0) scale(1); opacity: 1;
+        transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.25s ease, visibility 0s;
     }
-
     #custom-alert.hiding {
-        visibility: visible;
-        pointer-events: none;
-        transform: translateY(-15px) scale(0.95);
-        opacity: 0;
-        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease, visibility 0.3s step-end;
+        visibility: visible; pointer-events: none;
+        transform: translateY(-12px) scale(0.96); opacity: 0;
+        transition: transform 0.25s ease, opacity 0.25s ease, visibility 0.25s step-end;
+    }
+    #custom-alert.swiping { transition: none !important; }
+    #custom-alert.error { border: 2px solid var(--danger); }
+    #custom-alert #alert-icon { color: #4caf50; }
+    #custom-alert.error #alert-icon { color: var(--danger); }
+    @media (max-width: 792px) {
+        #custom-alert { top: 72px; left: 16px; right: 16px; width: auto; max-width: none; }
     }
 
-    #custom-alert.swiping {
-        transition: none !important;
-    }
-
-    #custom-alert.error {
-        border: 2px solid #ff4d4d !important;
-        background: var(--yt-alert-error-bg);
-    }
-
+    /* ---- Floating control and panel ---- */
     #floating-control {
         position: fixed !important;
-        bottom: 24px;
-        right: 24px;
+        bottom: 24px; right: 24px;
         z-index: 2500;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        /* スマホ等のセーフエリア（ホームバー）に対応 */
         padding-bottom: env(safe-area-inset-bottom, 0px);
         padding-right: env(safe-area-inset-right, 0px);
-        pointer-events: auto;
     }
-
     .yt-control-trigger {
-        width: 48px;
-        height: 48px;
-        border-radius: 50%;
-        background: var(--yt-spec-static-overlay-background-solid);
-        border: 1px solid var(--yt-spec-border-color);
-        color: var(--yt-spec-text-primary);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.1rem;
-        cursor: pointer;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        width: 52px; height: 52px; border-radius: 50%;
+        background: var(--surface-overlay);
+        border: 1px solid var(--border);
+        color: var(--text);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.1rem; cursor: pointer;
+        box-shadow: var(--shadow-md);
         transition: transform 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
-        outline: none;
         -webkit-tap-highlight-color: transparent;
     }
-
-    .yt-control-trigger:hover {
-        transform: scale(1.08);
-        background-color: var(--yt-spec-button-chip-hover);
-        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
-    }
-
-    .yt-control-trigger:active {
-        transform: scale(0.95);
-    }
+    .yt-control-trigger:hover { transform: scale(1.06); background-color: var(--hover); box-shadow: var(--shadow-lg); }
+    .yt-control-trigger:active { transform: scale(0.95); }
 
     #controlPanel {
         display: none;
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        width: 440px;
-        height: 520px;
-        background: var(--yt-cp-bg);
-        border: 1px solid var(--yt-cp-border);
-        border-radius: 16px;
+        position: fixed; bottom: 20px; right: 20px;
+        width: 420px; height: 520px;
+        background: var(--surface-overlay);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
         z-index: 2600;
-        box-shadow: 0 12px 40px rgba(0,0,0,.4);
+        box-shadow: var(--shadow-lg);
         overflow: hidden;
         flex-direction: column;
         opacity: 0;
-        transform: translateY(20px) scale(0.95);
-        transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
         pointer-events: none;
     }
-
     #controlPanel.open {
         display: flex;
-        animation: cpSlideUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        animation: cpSlideUp 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
         pointer-events: auto;
     }
-
     @keyframes cpSlideUp {
-        0% {
-            opacity: 0;
-            transform: translateY(30px) scale(0.9);
-        }
-        100% {
-            opacity: 1;
-            transform: translateY(0) scale(1);
-        }
+        from { opacity: 0; transform: translateY(24px) scale(0.96); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
     }
-
     @keyframes cpFadeIn {
-        0% {
-            opacity: 0;
-            transform: translateY(-8px);
-        }
-        100% {
-            opacity: 1;
-            transform: translateY(0);
-        }
+        from { opacity: 0; transform: translateY(-6px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    @media (max-width: 900px) {
+        #controlPanel { width: calc(100vw - 32px); right: 16px; bottom: 16px; height: 480px; }
+        #floating-control { bottom: 16px; right: 16px; }
     }
 
     .cp-header { display: flex; align-items: center; padding: 14px 16px 0; gap: 8px; flex-shrink: 0; }
-    .cp-title { font-size: 16px; font-weight: 600; flex: 1; color: var(--yt-spec-text-primary); }
-    .cp-close { background: none; border: none; color: var(--yt-spec-text-secondary); font-size: 24px; cursor: pointer; line-height: 1; }
-    .cp-close:hover { color: var(--yt-spec-text-primary); }
+    .cp-title { font-size: 1rem; font-weight: 700; flex: 1; color: var(--text); }
+    .cp-close {
+        background: none; border: none; color: var(--text-secondary);
+        font-size: 24px; line-height: 1; cursor: pointer;
+        width: 32px; height: 32px; border-radius: 50%;
+    }
+    .cp-close:hover { background: var(--hover); color: var(--text); }
 
-    .cp-tabs { display: flex; gap: 4px; padding: 10px 16px 0; flex-shrink: 0; }
-    .cp-tab { padding: 8px 16px; border-radius: 20px; border: none; background: var(--yt-cp-card-bg); color: var(--yt-spec-text-secondary); font-size: 14px; cursor: pointer; transition: background 0.15s, color 0.15s; }
-    .cp-tab.active { background: var(--yt-spec-text-primary); color: var(--yt-spec-base-background); font-weight: 600; }
+    .cp-tabs {
+        display: flex; gap: 2px; flex-shrink: 0;
+        margin: 12px 16px 0; padding: 3px;
+        background: var(--chip); border-radius: var(--radius-pill);
+    }
+    .cp-tab {
+        flex: 1; padding: 7px 0; border: none; border-radius: var(--radius-pill);
+        background: transparent; color: var(--text-secondary);
+        font: inherit; font-size: 0.85rem; font-weight: 500; cursor: pointer;
+        transition: background-color 0.15s, color 0.15s;
+    }
+    .cp-tab:hover { color: var(--text); }
+    .cp-tab.active { background: var(--surface-overlay); color: var(--text); font-weight: 600; box-shadow: var(--shadow-sm); }
 
     .cp-slide-wrap { flex: 1; overflow: hidden; position: relative; }
-    .cp-slide-track { display: flex; height: 100%; transition: transform 0.25s cubic-bezier(0.4,0,0.2,1); }
+    .cp-slide-track { display: flex; height: 100%; transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); }
     .cp-slide-page { min-width: 100%; height: 100%; overflow-y: auto; padding: 14px 16px 18px; box-sizing: border-box; }
 
-    .cp-card { background: var(--yt-cp-card-bg); border-radius: 12px; padding: 14px; margin-bottom: 10px; }
-    .cp-card-title { font-size: 12px; color: var(--yt-spec-text-secondary); margin-bottom: 10px; text-transform: uppercase; letter-spacing: .6px; font-weight: 600; }
-
-    .cp-btn { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 11px 14px; border-radius: 10px; border: none; background: var(--yt-cp-btn-bg); color: var(--yt-spec-text-primary); font-size: 15px; cursor: pointer; margin-bottom: 8px; text-align: left; }
-    .cp-btn:hover { background: var(--yt-cp-btn-hover); }
+    .cp-card {
+        background: var(--surface-raised);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: 14px; margin-bottom: 12px;
+    }
+    .cp-card-title {
+        font-size: 0.72rem; font-weight: 600; color: var(--text-secondary);
+        text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 10px;
+    }
+    .cp-btn {
+        display: flex; align-items: center; justify-content: space-between;
+        width: 100%; padding: 11px 14px; margin: 0;
+        border: none; border-radius: var(--radius-sm);
+        background: var(--chip); color: var(--text);
+        font: inherit; font-size: 0.95rem; text-align: left; cursor: pointer;
+        transition: background-color 0.15s;
+    }
+    .cp-btn:hover { background: var(--active); }
     .cp-btn-left { display: flex; align-items: center; gap: 10px; }
-    .cp-btn:last-child { margin-bottom: 0; }
+    .cp-chevron { font-size: 12px; color: var(--text-secondary); }
 
-    .cp-toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; font-size: 15px; color: var(--yt-spec-text-primary); }
-    .cp-toggle-row + .cp-toggle-row { border-top: 1px solid var(--yt-cp-border); }
+    .cp-toggle-row {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 10px 0; font-size: 0.95rem; color: var(--text);
+    }
+    .cp-toggle-row + .cp-toggle-row { border-top: 1px solid var(--border); }
 
     .toggle-switch { position: relative; width: 46px; height: 26px; flex-shrink: 0; }
-    .toggle-switch input { opacity: 0; width: 0; height: 0; }
-    .toggle-switch .slider { position: absolute; inset: 0; background: var(--yt-cp-btn-hover); border-radius: 26px; cursor: pointer; transition: background 0.2s; }
-    .toggle-switch .slider:before { content: ""; position: absolute; width: 20px; height: 20px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: transform 0.2s; }
-    .toggle-switch input:checked + .slider { background: #1a73e8; }
-    .toggle-switch input:checked + .slider:before { transform: translateX(20px); }
-
-    .cp-select { width: 100%; padding: 10px 12px; border-radius: 10px; background: var(--yt-cp-btn-bg); color: var(--yt-spec-text-primary); border: 1px solid transparent; font-size: 14px; margin-bottom: 8px; outline: none; }
-    .cp-select:focus { border-color: #1a73e8; }
-
-    .cp-mode-card { display: flex; align-items: flex-start; gap: 12px; background: var(--yt-cp-card-bg); border-radius: 12px; padding: 14px; margin-bottom: 8px; cursor: pointer; border: 2px solid transparent; transition: border-color 0.15s, background-color 0.15s; }
-    .cp-mode-card:hover { background: var(--yt-cp-btn-bg); }
-    .cp-mode-card.selected { border-color: #1a73e8; }
-    .cp-mode-card input[type=radio] { margin-top: 2px; flex-shrink: 0; accent-color: #1a73e8; width: 16px; height: 16px; }
-    .cp-mode-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; color: var(--yt-spec-text-primary); }
-    .cp-mode-desc { font-size: 13px; color: var(--yt-spec-text-secondary); line-height: 1.5; }
-
-    @media (max-width: 900px) {
-        #controlPanel { width: calc(100vw - 32px); right: 16px; bottom: 16px; height: 480px; }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+    .toggle-switch .slider {
+        position: absolute; inset: 0; border-radius: 26px; cursor: pointer;
+        background: color-mix(in srgb, var(--text) 25%, transparent);
+        transition: background-color 0.2s;
     }
+    .toggle-switch .slider:before {
+        content: ""; position: absolute; width: 20px; height: 20px; left: 3px; top: 3px;
+        background: #fff; border-radius: 50%;
+        box-shadow: var(--shadow-sm);
+        transition: transform 0.2s;
+    }
+    .toggle-switch input:checked + .slider { background: var(--accent); }
+    .toggle-switch input:checked + .slider:before { transform: translateX(20px); }
+    .toggle-switch input:focus-visible + .slider { box-shadow: var(--focus-ring); }
+
+    .cp-select {
+        width: 100%; padding: 10px 12px; margin-bottom: 4px;
+        border-radius: var(--radius-sm);
+        background: var(--surface); color: var(--text);
+        border: 1px solid var(--border);
+        font: inherit; font-size: 0.9rem;
+    }
+    .cp-select:focus { border-color: var(--accent); outline: none; box-shadow: var(--focus-ring); }
+
+    .cp-mode-card {
+        display: flex; align-items: flex-start; gap: 12px;
+        background: var(--surface-raised);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: 14px; margin-bottom: 10px; cursor: pointer;
+        transition: border-color 0.15s, background-color 0.15s;
+    }
+    .cp-mode-card:hover { background: var(--chip); }
+    .cp-mode-card.selected { border-color: var(--accent); background: var(--accent-soft); }
+    .cp-mode-card input[type=radio] { margin-top: 3px; flex-shrink: 0; accent-color: var(--accent); width: 16px; height: 16px; }
+    .cp-mode-title { font-size: 0.95rem; font-weight: 600; margin-bottom: 4px; color: var(--text); }
+    .cp-mode-desc { font-size: 0.8rem; color: var(--text-secondary); line-height: 1.5; }
 
     .yt-api-status {
-        display: inline-block;
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        margin-right: 6px;
-        animation: pulse-status 2s ease-in-out infinite;
+        display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+        margin-right: 2px; background: #4CAF50;
     }
-
-    .yt-api-status.active { background: #4CAF50; }
-    .yt-api-status.loading { background: #FFC107; animation: pulse-loading 1s ease-in-out infinite; }
+    .yt-api-status.loading { background: #FFC107; }
     .yt-api-status.error { background: #F44336; }
-
-    @keyframes pulse-status { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
-    @keyframes pulse-loading { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
-
-    .yt-playlist-panel {
-        background-color: var(--yt-spec-badge-chip-background);
-        border: 1px solid var(--yt-spec-border-color);
-        border-radius: 12px;
-        padding: 12px;
-        margin-bottom: 12px;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        max-height: 400px;
-        overflow-y: auto;
-    }
-
-    .yt-playlist-panel-header {
-        font-size: 0.9rem;
-        font-weight: 700;
-        padding-bottom: 8px;
-        border-bottom: 1px solid var(--yt-spec-border-color);
-        color: var(--yt-spec-text-primary);
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-
-    .yt-playlist-panel-close {
-        cursor: pointer;
-        font-size: 1rem;
-        color: var(--yt-spec-text-secondary);
-        padding: 2px 6px;
-        border-radius: 50%;
-        transition: background-color 0.2s, color 0.2s;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-    }
-
-    .yt-playlist-panel-close:hover {
-        background-color: var(--yt-spec-button-chip-hover);
-        color: var(--yt-spec-text-primary);
-    }
-
-    .yt-playlist-panel-item {
-        display: flex;
-        gap: 8px;
-        align-items: center;
-        text-decoration: none;
-        color: inherit;
-        padding: 6px;
-        border-radius: 8px;
-        transition: background-color 0.15s ease;
-    }
-
-    .yt-playlist-panel-item:hover {
-        background-color: var(--yt-spec-button-chip-hover);
-    }
-
-    .yt-playlist-panel-item.active {
-        background-color: var(--yt-spec-button-chip-hover);
-        border-left: 3px solid var(--yt-brand-red);
-    }
-
-    .yt-playlist-panel-num {
-        font-size: 0.75rem;
-        color: var(--yt-spec-text-secondary);
-        width: 18px;
-        text-align: center;
-        flex-shrink: 0;
-    }
-
-    .yt-playlist-panel-thumb-wrapper {
-        width: 80px;
-        aspect-ratio: 16 / 9;
-        border-radius: 4px;
-        overflow: hidden;
-        flex-shrink: 0;
-        background-color: #000;
-    }
-
-    .yt-playlist-panel-thumb {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-    }
-
-    .yt-playlist-panel-details {
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-        min-width: 0;
-        text-align: left;
-    }
-
-    .yt-playlist-panel-title {
-        font-size: 0.8rem;
-        font-weight: 500;
-        line-height: 1.2;
-        color: var(--yt-spec-text-primary);
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
-    }
-
-    .yt-playlist-panel-author {
-        font-size: 0.7rem;
-        color: var(--yt-spec-text-secondary);
-    }
-</style>  {% endblock %}
+</style>
+{% endblock %}
 
 {% block content %}
-<div id="custom-alert">
-<div style="display: flex; align-items: center; gap: 10px;">
-<i id="alert-icon" class="fas fa-info-circle"></i>
-<span id="alert-text"></span>
-</div>
+<div id="custom-alert" role="status" aria-live="polite">
+    <i id="alert-icon" class="fas fa-info-circle"></i>
+    <span id="alert-text"></span>
 </div>
 
-<div id="dl-modal" class="yt-modal-overlay">
+<div id="dl-modal" class="yt-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="dl-modal-title">
     <div class="yt-modal-content">
-        <i class="fas fa-times yt-modal-close" onclick="closeModal()"></i>
-        <h3 style="margin-top:0; font-size:1.1rem; margin-bottom:16px;">
-            <i class="fas fa-download" style="margin-right:8px; color:var(--yt-brand-red);"></i>動画を保存
-        </h3>
+        <button type="button" class="yt-modal-close" aria-label="閉じる" onclick="closeModal()"><i class="fas fa-times"></i></button>
+        <h3 id="dl-modal-title" class="yt-modal-title"><i class="fas fa-download"></i>動画を保存</h3>
         <div id="dl-list">
-            {% for stream in streamUrls %}
-            <div class="yt-dl-item" style="display:flex; justify-content:space-between; align-items:center; padding: 10px 0; border-bottom: 1px solid var(--yt-spec-border-color);">
-                <div>
-                    <strong style="font-size:0.9rem;">{{ stream.resolution }}</strong>
-                    <span style="color:var(--yt-spec-text-secondary); font-size:0.8rem; margin-left:4px;">({{ stream.format }})</span>
-                </div>
-                <a href="{{ stream.url }}" download class="yt-pill-button" style="height:32px; padding:0 12px; font-size:0.8rem;">ダウンロード</a>
+            {% for stream in streamUrls or [] %}
+            {% if stream.url %}
+            <div class="yt-dl-item">
+                <div><strong>{{ stream.resolution }}</strong><span class="yt-dl-format">({{ stream.format }})</span></div>
+                <a href="{{ stream.url }}" download class="yt-pill-button yt-dl-btn">ダウンロード</a>
             </div>
+            {% endif %}
             {% endfor %}
         </div>
     </div>
 </div>
 
 <div id="floating-control">
-    <button type="button" class="yt-control-trigger" aria-label="コントロールパネルを開く" onclick="toggleControlPanel()">
+    <button type="button" class="yt-control-trigger" aria-label="コントロールパネルを開く" aria-controls="controlPanel" aria-expanded="false" onclick="toggleControlPanel()">
         <i class="fas fa-cog"></i>
     </button>
 </div>
 
-
-<div id="controlPanel">
+<div id="controlPanel" role="dialog" aria-label="コントロールパネル">
     <div class="cp-header">
         <div class="cp-title">コントロールパネル</div>
-        <button class="cp-close" onclick="toggleControlPanel()">&times;</button>
+        <button type="button" class="cp-close" aria-label="閉じる" onclick="toggleControlPanel(false)">&times;</button>
     </div>
-    <div class="cp-tabs">
-        <button class="cp-tab active" onclick="switchCpTab(0)">再生</button>
-        <button class="cp-tab" onclick="switchCpTab(1)">ソース</button>
-        <button class="cp-tab" onclick="switchCpTab(2)">API</button>
+    <div class="cp-tabs" role="tablist">
+        <button type="button" class="cp-tab active" onclick="switchCpTab(0)">再生</button>
+        <button type="button" class="cp-tab" onclick="switchCpTab(1)">ソース</button>
+        <button type="button" class="cp-tab" onclick="switchCpTab(2)">API</button>
     </div>
     <div class="cp-slide-wrap">
         <div class="cp-slide-track" id="cpSlideTrack">
@@ -932,9 +675,9 @@
                 </div>
                 <div class="cp-card">
                     <div class="cp-card-title">画質設定</div>
-                    <button class="cp-btn" onclick="openQualityDropdownFromCp()">
-                        <span class="cp-btn-left"><i class="fas fa-sliders-h"></i> <span id="cpCurrentQualityText">画質を選択...</span></span>
-                        <i class="fas fa-chevron-right" style="font-size:12px; color:#aaa;"></i>
+                    <button type="button" class="cp-btn" onclick="openQualityDropdownFromCp()">
+                        <span class="cp-btn-left"><i class="fas fa-sliders-h"></i> <span id="cpCurrentQualityText">自動</span></span>
+                        <i class="fas fa-chevron-right cp-chevron"></i>
                     </button>
                 </div>
             </div>
@@ -977,7 +720,6 @@
                         <option value="sennin">Sennin API</option>
                     </select>
                 </div>
-
                 <div class="cp-card">
                     <div class="cp-card-title">情報取得 API</div>
                     <select class="cp-select" id="cpInfoApiSelect" onchange="applyInfoApiChange(this.value)">
@@ -995,132 +737,125 @@
 <div class="yt-watch-page-container">
     <div class="yt-primary-column">
         <div id="player-wrapper">
-            <div id="loader" class="loader-overlay">
-                <div class="yt-spinner"></div>
-            </div>
-            <video id="video-player" controls autoplay poster="/thumbnail?v={{ videoid }}" src="{{ videourls[0] if videourls else '' }}">
+            <div id="loader" class="loader-overlay" aria-hidden="true"><div class="yt-spinner"></div></div>
+            <video id="video-player" controls autoplay playsinline preload="auto" poster="/thumbnail?v={{ videoid }}">
                 お使いのブラウザは動画再生に対応していません。
             </video>
-            <audio id="audio-sync" style="display:none;"></audio>
-            <div id="iframe-container" style="display:none; width:100%; height:100%;"></div>
-        </div>
-
-        <h1 class="yt-video-title" id="video-title">
-            {% if video_title %}{{ video_title }}{% else %}<div class="skeleton-box skeleton-text" style="width: 75%; height: 24px;"></div>{% endif %}
-        </h1>
-
-        <div class="yt-owner-actions-row">
-            <div class="yt-owner-info" id="owner-info">
-                <a href="/channel/{{ author_id }}" class="yt-channel-avatar-link" id="channel-avatar">
-                    <img src="{{ author_icon }}" alt="{{ author }}" onerror="this.style.display='none'">
-                </a>
-                <div class="yt-channel-text" id="channel-text">
-                    {% if author %}
-                        <a href="/channel/{{ author_id }}" class="yt-channel-name">{{ author }}</a>
-                        <span class="yt-channel-subscribers">チャンネル登録者数 {{ subscribers_count }}</span>
-                    {% else %}
-                        <div class="skeleton-box skeleton-text" style="width: 120px; height: 16px;"></div>
-                        <div class="skeleton-box skeleton-text" style="width: 80px; height: 12px; margin-top: 4px;"></div>
-                    {% endif %}
-                </div>
-                <button class="yt-subscribe-btn" id="subscribe-btn" onclick="toggleSubscribe('{{ author_id }}')">チャンネル登録</button>
-            </div>
-
-            <div class="yt-actions-group">
-                <div class="yt-like-dislike-group">
-                    <button class="yt-like-btn">
-                        <i class="far fa-thumbs-up"></i>
-                        <span>{{ like_count if like_count else '高評価' }}</span>
-                    </button>
-                    <div class="yt-like-dislike-divider"></div>
-                    <button class="yt-dislike-btn" aria-label="低評価">
-                        <i class="far fa-thumbs-down"></i>
-                    </button>
-                </div>
-
-                <button class="yt-pill-button" onclick="openModal()">
-                    <i class="fas fa-download"></i>
-                    <span>保存</span>
-                </button>
-
-                <div class="yt-custom-select" id="qualitySelect">
-                    <button class="yt-pill-button" id="qualityTrigger" onclick="toggleQualityDropdown(event)">
-                        <i class="fas fa-cog"></i>
-                        <span id="qualityLabel">画質: 自動</span>
-                        <i class="fas fa-chevron-down" style="font-size: 0.75rem; margin-left: 2px;"></i>
-                    </button>
-                    <div class="yt-select-dropdown">
-                        <div class="yt-dropdown-item selected" data-value="{{ videourls[0] if videourls else '' }}" data-audio="">自動 (デフォルト)</div>
-                        {% for stream in streamUrls %}
-                        <div class="yt-dropdown-item" data-value="{{ stream.url }}" data-audio="{{ stream.audioUrl or '' }}">
-                            {{ stream.resolution }} ({{ stream.format }})
-                        </div>
-                        {% endfor %}
-                        <div class="yt-dropdown-item" data-type="m3u8" data-value="{{ youtube_url }}">HLS (m3u8)</div>
-                    </div>
-                </div>
-
-                <div class="yt-custom-select" id="apiInfoSelect">
-                    <button class="yt-pill-button" id="apiInfoTrigger" onclick="toggleApiInfoDropdown(event)">
-                        <span class="yt-api-status active"></span>
-                        <span id="apiInfoLabel">API: 情報を確認中</span>
-                        <i class="fas fa-chevron-down" style="font-size: 0.75rem; margin-left: 2px;"></i>
-                    </button>
-                    <div class="yt-select-dropdown" id="apiInfoDropdown">
-                        <div class="yt-dropdown-section">
-                            <div class="yt-dropdown-label">情報取得API</div>
-                            <div id="infoApiDisplay" class="yt-dropdown-value">取得中...</div>
-                            <div id="infoApiStatusDisplay" class="yt-dropdown-value" style="color: var(--yt-spec-text-secondary); font-size: 0.7rem; margin-top: 2px;"></div>
-                        </div>
-                        <div class="yt-dropdown-section">
-                            <div class="yt-dropdown-label">ストリーム取得API</div>
-                            <div id="streamApiDisplay" class="yt-dropdown-value">取得中...</div>
-                            <div id="streamApiStatusDisplay" class="yt-dropdown-value" style="color: var(--yt-spec-text-secondary); font-size: 0.7rem; margin-top: 2px;"></div>
-                        </div>
-                    </div>
+            <audio id="audio-sync" preload="auto" hidden></audio>
+            <div id="iframe-container" style="display:none;"></div>
+            <div id="player-error" class="player-error" role="alert" hidden>
+                <i class="fas fa-triangle-exclamation player-error-icon" aria-hidden="true"></i>
+                <p class="player-error-title">動画を再生できませんでした</p>
+                <p class="player-error-text">利用できるすべての再生候補で読み込みに失敗しました。再試行するか、埋め込みプレイヤーで再生してください。</p>
+                <div class="player-error-actions">
+                    <button type="button" class="yt-pill-button is-primary" id="player-retry-btn" onclick="retryPlayback()">再試行</button>
+                    <button type="button" class="yt-pill-button" id="player-embed-btn" onclick="selectSourceMode('nocookie', { persist: false })">YouTube NoCookie で再生</button>
                 </div>
             </div>
         </div>
 
-        <div class="yt-description-container collapsed" id="description-container">
-            <div class="yt-description-header">
-                <span>{{ view_count if view_count else '---' }} 回視聴</span>
-                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                    <span class="yt-api-badge" id="api-info-badge">
-                        情報API: <span id="current-info-api-name">{{ info_api_used or '取得中' }}</span>
-                    </span>
-                    <span class="yt-api-badge" id="stream-info-badge">
-                        ストリームAPI: <span id="current-stream-api-name">{{ stream_api_used or '取得中' }}</span>
-                    </span>
-                </div>
-            </div>
-            <div class="yt-description-body" id="description-body">{% if description %}{{ description | safe }}{% else %}<div class="skeleton-box skeleton-text" style="width: 90%;"></div><div class="skeleton-box skeleton-text" style="width: 60%;"></div>{% endif %}</div>
-            <button class="yt-description-toggle-btn" id="desc-toggle-btn" onclick="toggleDescription()">...もっと見る</button>
-        </div>
+        <div class="yt-primary-info">
+            <h1 class="yt-video-title" id="video-title">
+                {% if video_title %}{{ video_title }}{% else %}<span class="skeleton-box skel-title"></span>{% endif %}
+            </h1>
 
-        <div class="yt-comments-container">
-            <div class="yt-comments-header" style="font-weight:700; margin-bottom:16px; text-align: left;"><span>コメント</span></div>
-            <div id="comment-list">
-                {% if comments %}
-                    {% for c in comments %}
-                    <div class="yt-comment-item" style="display:flex; gap:16px; margin-bottom:20px; text-align: left;">
-                        <img src="{{ c.authorThumbnail if c.authorThumbnail else (c.authorThumbnails|last).url if c.authorThumbnails else '' }}" class="yt-comment-avatar" style="width:40px; height:40px; border-radius:50%; flex-shrink:0;" onerror="this.style.display='none'">
-                        <div>
-                            <div style="font-size:0.8rem; font-weight:600;">{{ c.author }} <span style="color:var(--yt-spec-text-secondary); font-weight:400;">{{ c.publishedText }}</span></div>
-                            <div style="font-size:0.875rem; margin-top:4px;">{{ c.contentHtml | safe }}</div>
+            <div class="yt-owner-actions-row">
+                <div class="yt-owner-info" id="owner-info">
+                    <a href="/channel/{{ author_id }}" class="yt-channel-avatar-link" id="channel-avatar" aria-label="チャンネルを開く">
+                        {% if author_icon %}<img src="{{ author_icon }}" alt="" loading="lazy" decoding="async" onerror="this.style.display='none'">{% endif %}
+                    </a>
+                    <div class="yt-channel-text" id="channel-text">
+                        {% if author %}
+                            <a href="/channel/{{ author_id }}" class="yt-channel-name">{{ author }}</a>
+                            <span class="yt-channel-subscribers">チャンネル登録者数 {{ subscribers_count }}</span>
+                        {% else %}
+                            <div class="skeleton-box skeleton-text" style="width: 120px; height: 16px;"></div>
+                            <div class="skeleton-box skeleton-text" style="width: 80px; height: 12px; margin-top: 4px;"></div>
+                        {% endif %}
+                    </div>
+                    <button type="button" class="yt-subscribe-btn" id="subscribe-btn" data-ucid="{{ author_id }}" aria-pressed="false">チャンネル登録</button>
+                </div>
+
+                <div class="yt-actions-group">
+                    <div class="yt-like-dislike-group">
+                        <button type="button" class="yt-like-btn"><i class="far fa-thumbs-up"></i><span>{{ like_count if like_count else '高評価' }}</span></button>
+                        <div class="yt-like-dislike-divider"></div>
+                        <button type="button" class="yt-dislike-btn" aria-label="低評価"><i class="far fa-thumbs-down"></i></button>
+                    </div>
+
+                    <button type="button" class="yt-pill-button" onclick="openModal()">
+                        <i class="fas fa-download"></i><span>保存</span>
+                    </button>
+
+                    <div class="yt-custom-select" id="qualitySelect">
+                        <button type="button" class="yt-pill-button" id="qualityTrigger" aria-haspopup="listbox" onclick="toggleQualityDropdown(event)">
+                            <i class="fas fa-sliders-h"></i>
+                            <span id="qualityLabel">画質: 自動</span>
+                            <i class="fas fa-chevron-down yt-chevron"></i>
+                        </button>
+                        <div class="yt-select-dropdown" id="qualityMenu" role="listbox">
+                            <div class="yt-dropdown-item selected" data-auto="1" role="option" aria-selected="true">自動 (デフォルト)</div>
                         </div>
                     </div>
+
+                    <div class="yt-custom-select" id="apiInfoSelect">
+                        <button type="button" class="yt-pill-button" id="apiInfoTrigger" aria-haspopup="true" onclick="toggleApiInfoDropdown(event)">
+                            <span class="yt-api-status active"></span>
+                            <span id="apiInfoLabel">API: 情報を確認中</span>
+                            <i class="fas fa-chevron-down yt-chevron"></i>
+                        </button>
+                        <div class="yt-select-dropdown" id="apiInfoDropdown">
+                            <div class="yt-dropdown-section">
+                                <div class="yt-dropdown-label">情報取得API</div>
+                                <div id="infoApiDisplay" class="yt-dropdown-value">取得中...</div>
+                                <div id="infoApiStatusDisplay" class="yt-dropdown-note"></div>
+                            </div>
+                            <div class="yt-dropdown-section">
+                                <div class="yt-dropdown-label">ストリーム取得API</div>
+                                <div id="streamApiDisplay" class="yt-dropdown-value">取得中...</div>
+                                <div id="streamApiStatusDisplay" class="yt-dropdown-note"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="yt-description-container collapsed" id="description-container">
+                <div class="yt-description-header">
+                    <span>{{ view_count if view_count else '---' }} 回視聴</span>
+                    <div class="yt-api-badges">
+                        <span class="yt-api-badge" id="api-info-badge">情報API: <span id="current-info-api-name">{{ info_api_used or '取得中' }}</span></span>
+                        <span class="yt-api-badge" id="stream-info-badge">ストリームAPI: <span id="current-stream-api-name">{{ stream_api_used or '取得中' }}</span></span>
+                    </div>
+                </div>
+                <div class="yt-description-body" id="description-body">{% if description %}{{ description | safe }}{% else %}<div class="skeleton-box skeleton-text" style="width: 90%;"></div><div class="skeleton-box skeleton-text" style="width: 60%;"></div>{% endif %}</div>
+                <button type="button" class="yt-description-toggle-btn" id="desc-toggle-btn" aria-expanded="false" onclick="toggleDescription()">...もっと見る</button>
+            </div>
+
+            <section class="yt-comments-container" aria-labelledby="comments-title">
+                <div class="yt-comments-header"><span id="comments-title">コメント</span></div>
+                <div id="comment-list" data-server="{{ '1' if comments else '0' }}" aria-busy="false">
+                    {% for c in comments or [] %}
+                    <article class="yt-comment-item">
+                        {% if c.authorIcon %}
+                        <img class="yt-comment-avatar" src="{{ c.authorIcon }}" alt="" loading="lazy" decoding="async" onerror="this.style.display='none'">
+                        {% else %}
+                        <span class="yt-comment-avatar yt-comment-avatar-fallback" aria-hidden="true">{{ (c.author or '?')[:1] }}</span>
+                        {% endif %}
+                        <div class="yt-comment-body">
+                            <div class="yt-comment-meta"><span class="yt-comment-author">{{ c.author }}</span><span class="yt-comment-time">{{ c.publishedText }}</span></div>
+                            <div class="yt-comment-text">{{ (c.content or '')|trim }}</div>
+                            {% if c.likeCount or c.replyCount %}
+                            <div class="yt-comment-foot">
+                                {% if c.likeCount %}<span><i class="far fa-thumbs-up"></i> {{ "{:,}".format(c.likeCount|int) }}</span>{% endif %}
+                                {% if c.replyCount %}<span>返信 {{ "{:,}".format(c.replyCount|int) }}件</span>{% endif %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </article>
                     {% endfor %}
-                {% else %}
-                    <div class="yt-comment-item" style="display:flex; gap:16px; margin-bottom:16px; text-align: left;">
-                        <div class="skeleton-box" style="width:40px; height:40px; border-radius:50%;"></div>
-                        <div style="flex:1;">
-                            <div class="skeleton-box skeleton-text" style="width: 120px;"></div>
-                            <div class="skeleton-box skeleton-text" style="width: 80%;"></div>
-                        </div>
-                    </div>
-                {% endif %}
-            </div>
+                </div>
+            </section>
         </div>
     </div>
 
@@ -1130,15 +865,15 @@
             <div class="yt-playlist-panel-header">
                 <div style="display: flex; flex-direction: column; gap: 2px;">
                     <span>{{ playlist_title if playlist_title else 'プレイリスト' }}</span>
-                    <span style="font-size:0.75rem; color:var(--yt-spec-text-secondary); font-weight:normal;">プレイリスト動画</span>
+                    <span style="font-size:0.75rem; color:var(--text-secondary); font-weight:normal;">プレイリスト動画</span>
                 </div>
-                <i class="fas fa-times yt-playlist-panel-close" onclick="closePlaylist()" title="閉じる"></i>
+                <i class="fas fa-times yt-playlist-panel-close" onclick="closePlaylist()" title="閉じる" role="button" aria-label="閉じる"></i>
             </div>
             {% for pv in playlist_videos %}
             <a href="/watch?v={{ pv.videoId }}&list={{ playlist_id }}" class="yt-playlist-panel-item {% if pv.videoId == videoid %}active{% endif %}">
                 <div class="yt-playlist-panel-num">{{ loop.index }}</div>
                 <div class="yt-playlist-panel-thumb-wrapper">
-                    <img src="/proxy/thumb?v={{ pv.videoId }}" class="yt-playlist-panel-thumb" alt="{{ pv.title }}" onerror="this.style.opacity='0.3'">
+                    <img src="/proxy/thumb?v={{ pv.videoId }}" class="yt-playlist-panel-thumb" alt="" loading="lazy" decoding="async" onerror="this.style.opacity='0.3'">
                 </div>
                 <div class="yt-playlist-panel-details">
                     <div class="yt-playlist-panel-title">{{ pv.title }}</div>
@@ -1153,7 +888,7 @@
             {% for v in recommended_videos %}
             <a href="/watch?v={{ v.video_id }}" class="yt-recommend-card">
                 <div class="yt-recommend-thumb-wrapper">
-                    <img src="/thumbnail?v={{ v.video_id }}" class="yt-recommend-thumb" loading="lazy" alt="{{ v.title }}" onerror="this.style.opacity='0.3'">
+                    <img src="/thumbnail?v={{ v.video_id }}" class="yt-recommend-thumb" loading="lazy" decoding="async" alt="" onerror="this.style.opacity='0.3'">
                 </div>
                 <div class="yt-recommend-details">
                     <div class="yt-recommend-title">{{ v.title }}</div>
@@ -1180,29 +915,517 @@
 </div>
 
 <script>
+    // ---------- Server data ----------
     const video = document.getElementById('video-player');
     const audio = document.getElementById('audio-sync');
     const iframeContainer = document.getElementById('iframe-container');
-    const videoId = "{{ videoid }}";
-    const authorId = "{{ author_id }}";
-    const streamApiUsed = "{{ stream_api_used }}";
-    const infoApiUsed = "{{ info_api_used }}";
-    let hlsInstance = null;
+    const loader = document.getElementById('loader');
+    const playerError = document.getElementById('player-error');
+    const videoId = {{ videoid|tojson }};
+    const authorId = {{ (author_id or '')|tojson }};
+    const streamApiUsed = {{ (stream_api_used or '')|tojson }};
+    const infoApiUsed = {{ (info_api_used or '')|tojson }};
+    const NOCOOKIE_BASE = {{ (nocookie_url or '')|tojson }};
+    const SERVER_STREAMS = {{ (streamUrls or [])|tojson }};
+    const SERVER_VIDEO_URLS = {{ (videourls or [])|tojson }};
+
+    const START_TIMEOUT_MS = 8000;
+    const STREAM_REFRESH_TIMEOUT_MS = 12000;
+    const COMMENTS_TIMEOUT_MS = 8000;
+
+    // ---------- Small helpers ----------
+    function lsGet(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+    function lsSet(key, value) { try { localStorage.setItem(key, value); } catch (e) {} }
+    function safePlay(media) {
+        try {
+            const p = media.play();
+            if (p && typeof p.catch === 'function') p.catch(() => {});
+        } catch (e) {}
+    }
+    async function fetchJson(url, timeoutMs) {
+        const ctl = new AbortController();
+        const timer = setTimeout(() => ctl.abort(), timeoutMs);
+        try {
+            const res = await fetch(url, { signal: ctl.signal, headers: { Accept: 'application/json' }, cache: 'no-store' });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            return await res.json();
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+
+    // hls.js is loaded with defer; the player waits for it (or gives up after 6s).
+    const hlsReady = new Promise((resolve) => {
+        if (typeof Hls !== 'undefined') return resolve(true);
+        const s = document.getElementById('hls-js');
+        const done = () => resolve(typeof Hls !== 'undefined');
+        if (s) {
+            s.addEventListener('load', done);
+            s.addEventListener('error', done);
+        }
+        setTimeout(done, 6000);
+    });
+
+    // ---------- Candidate selection ----------
+    const HLS_URL_RE = /\.m3u8|\/manifest\//i;
+
+    function normalizeStream(raw) {
+        if (!raw || typeof raw.url !== 'string' || !raw.url) return null;
+        const format = typeof raw.format === 'string' ? raw.format : '';
+        return {
+            url: raw.url,
+            format: format,
+            resolution: typeof raw.resolution === 'string' ? raw.resolution : '',
+            audioUrl: typeof raw.audioUrl === 'string' ? raw.audioUrl : '',
+            hls: /mpegurl/i.test(format) || HLS_URL_RE.test(raw.url),
+            videoOnly: /videoonly/i.test(format),
+        };
+    }
+
+    // Best first: (0) muxed non-HLS, (1) HLS, (2) video-only with an audio track.
+    // Video-only items without audioUrl cannot be played and are dropped.
+    function orderCandidates(streams, urls) {
+        const seen = new Set();
+        const out = [];
+        const add = (c) => {
+            if (c && !seen.has(c.url)) { seen.add(c.url); out.push(c); }
+        };
+        (Array.isArray(streams) ? streams : []).forEach((s) => add(normalizeStream(s)));
+        (Array.isArray(urls) ? urls : []).forEach((u) => add(normalizeStream(typeof u === 'string' ? { url: u } : u)));
+
+        const rank = (c) => {
+            if (c.hls) return 1;
+            if (c.videoOnly) return c.audioUrl ? 2 : -1;
+            return 0;
+        };
+        return out
+            .map((c, i) => ({ c, i, r: rank(c) }))
+            .filter((x) => x.r >= 0)
+            .sort((a, b) => a.r - b.r || a.i - b.i)
+            .map((x) => x.c);
+    }
+
+    function candidateLabel(c) {
+        const res = c.resolution || '不明';
+        const fmt = c.hls ? 'HLS' : c.format;
+        return fmt ? `${res} (${fmt})` : res;
+    }
+
+    let playableCandidates = [];
+    const playback = {
+        list: [],          // candidates for the current attempt chain
+        index: -1,
+        token: 0,          // bumped on every teardown; stale callbacks compare against it
+        timer: null,
+        current: null,
+        resumeAt: 0,
+        refreshed: false,  // one stream refresh per failure chain
+        broken: false,     // every candidate failed and nothing is playing
+        hls: null,
+    };
+
+    function setLoading(on) { loader.classList.toggle('visible', !!on); }
+    function showPlayerError() { setLoading(false); playerError.hidden = false; }
+    function hidePlayerError() { playerError.hidden = true; }
+    function hideIframe() {
+        iframeContainer.style.display = 'none';
+        iframeContainer.replaceChildren();
+        video.style.display = 'block';
+    }
+
+    function stopMedia() {
+        playback.token += 1;
+        clearTimeout(playback.timer);
+        playback.timer = null;
+        playback.current = null;
+        if (playback.hls) {
+            try { playback.hls.destroy(); } catch (e) {}
+            playback.hls = null;
+        }
+        audio.pause();
+        audio.removeAttribute('src');
+        audio.load();
+        video.pause();
+        video.removeAttribute('src');
+        video.load();
+    }
+
+    function playCandidate(index, resumeAt) {
+        if (index >= playback.list.length) {
+            handleAllFailed();
+            return;
+        }
+        stopMedia();
+        const token = playback.token;
+        const c = playback.list[index];
+        playback.index = index;
+        playback.current = c;
+        playback.resumeAt = resumeAt || 0;
+        playback.broken = false;
+        hidePlayerError();
+        hideIframe();
+        setLoading(true);
+        playback.timer = setTimeout(() => failCandidate(token, 'timeout'), START_TIMEOUT_MS);
+
+        if (c.audioUrl) {
+            audio.src = c.audioUrl;
+            audio.load();
+        }
+
+        if (c.hls) {
+            hlsReady.then(() => {
+                if (token !== playback.token) return;
+                if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+                    const hls = new Hls();
+                    playback.hls = hls;
+                    hls.on(Hls.Events.ERROR, (_evt, data) => {
+                        if (data && data.fatal) failCandidate(token, 'hls:' + data.type);
+                    });
+                    hls.loadSource(c.url);
+                    hls.attachMedia(video);
+                } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+                    video.src = c.url;
+                } else {
+                    failCandidate(token, 'hls unsupported');
+                }
+            });
+        } else {
+            video.src = c.url;
+        }
+    }
+
+    function failCandidate(token, reason) {
+        if (token !== playback.token) return;
+        clearTimeout(playback.timer);
+        playback.timer = null;
+        console.warn('[player] candidate failed:', reason, playback.current && playback.current.url);
+        const next = playback.index + 1;
+        if (next < playback.list.length) {
+            showAlert(`再生できないため別の候補に切り替えます（${next + 1}/${playback.list.length}）`, 2500, true);
+            playCandidate(next, video.currentTime || 0);
+        } else {
+            handleAllFailed();
+        }
+    }
+
+    async function handleAllFailed() {
+        stopMedia();
+        playback.broken = true;
+        if (!playback.refreshed) {
+            playback.refreshed = true;
+            const t0 = playback.token;
+            setLoading(true);
+            showAlert('再生できる候補がないため、ストリームを取得し直しています...', 3000, true);
+            let data = null;
+            try {
+                // refresh=1: キャッシュを捨てて取り直す / proxy=1: 直リンクが拒否されるため中継URLに変える
+                data = await fetchJson(`/api/streams/${encodeURIComponent(videoId)}?refresh=1&proxy=1`, STREAM_REFRESH_TIMEOUT_MS);
+            } catch (e) {
+                console.warn('[player] stream refresh failed', e);
+            }
+            if (t0 !== playback.token) return; // the user acted in the meantime
+            if (data && orderCandidates(data.streamUrls, data.videoUrls).length) {
+                setCandidates(data.streamUrls, data.videoUrls);
+                playback.list = playableCandidates.slice();
+                playCandidate(0, 0);
+                return;
+            }
+        }
+        showPlayerError();
+    }
+
+    function onVideoReady() {
+        if (!playback.current) return;
+        clearTimeout(playback.timer);
+        playback.timer = null;
+        playback.refreshed = false;
+        playback.broken = false;
+        setLoading(false);
+    }
+
+    // ---------- Video element events ----------
+    video.addEventListener('loadedmetadata', () => {
+        if (playback.resumeAt > 0) {
+            try { video.currentTime = playback.resumeAt; } catch (e) {}
+            playback.resumeAt = 0;
+        }
+        syncAudioNow();
+    });
+    video.addEventListener('canplay', onVideoReady);
+    video.addEventListener('playing', onVideoReady);
+    video.addEventListener('error', () => {
+        const c = playback.current;
+        if (!c || playback.hls) return;                  // hls.js reports its own fatal errors
+        if (video.getAttribute('src') !== c.url) return; // stale error from an earlier source
+        failCandidate(playback.token, 'media error ' + (video.error ? video.error.code : '?'));
+    });
+
+    // ---------- Audio track sync (video-only streams) ----------
+    const hasSeparateAudio = () => audio.hasAttribute('src');
+    function setAudioTime(t) { try { audio.currentTime = t; } catch (e) {} }
+    function syncAudioNow() {
+        if (!hasSeparateAudio()) return;
+        setAudioTime(video.currentTime);
+        audio.playbackRate = video.playbackRate;
+        audio.volume = video.volume;
+        audio.muted = video.muted;
+    }
+
+    audio.addEventListener('loadedmetadata', syncAudioNow);
+    audio.addEventListener('error', () => {
+        if (hasSeparateAudio()) showAlert('音声トラックを読み込めませんでした', 2500, true);
+    });
+    video.addEventListener('play', () => {
+        if (hasSeparateAudio()) { setAudioTime(video.currentTime); safePlay(audio); }
+    });
+    video.addEventListener('playing', () => {
+        if (hasSeparateAudio() && audio.paused && !video.paused) { setAudioTime(video.currentTime); safePlay(audio); }
+    });
+    video.addEventListener('pause', () => { if (hasSeparateAudio()) audio.pause(); });
+    video.addEventListener('waiting', () => { if (hasSeparateAudio()) audio.pause(); });
+    video.addEventListener('seeking', () => { if (hasSeparateAudio()) setAudioTime(video.currentTime); });
+    video.addEventListener('ratechange', () => { if (hasSeparateAudio()) audio.playbackRate = video.playbackRate; });
+    video.addEventListener('volumechange', () => {
+        if (hasSeparateAudio()) { audio.volume = video.volume; audio.muted = video.muted; }
+    });
+    video.addEventListener('timeupdate', () => {
+        if (!hasSeparateAudio() || video.paused || audio.seeking || audio.readyState < 3) return;
+        if (Math.abs(audio.currentTime - video.currentTime) > 0.3) setAudioTime(video.currentTime);
+    });
+
+    // ---------- Quality menu ----------
+    function setCandidates(streams, urls) {
+        playableCandidates = orderCandidates(streams, urls);
+        renderQualityItems();
+    }
+
+    function renderQualityItems() {
+        const menu = document.getElementById('qualityMenu');
+        menu.querySelectorAll('[data-idx]').forEach((n) => n.remove());
+        playableCandidates.forEach((c, idx) => {
+            const item = document.createElement('div');
+            item.className = 'yt-dropdown-item';
+            item.dataset.idx = String(idx);
+            item.dataset.type = c.hls ? 'm3u8' : 'mp4';
+            item.setAttribute('role', 'option');
+            item.setAttribute('aria-selected', 'false');
+            item.textContent = candidateLabel(c);
+            menu.appendChild(item);
+        });
+    }
+
+    function setQualityLabel(text) {
+        document.getElementById('qualityLabel').textContent = '画質: ' + text;
+        document.getElementById('cpCurrentQualityText').textContent = text;
+    }
+
+    function markQualitySelected(item) {
+        document.querySelectorAll('#qualityMenu .yt-dropdown-item').forEach((i) => {
+            const on = i === item;
+            i.classList.toggle('selected', on);
+            i.setAttribute('aria-selected', String(on));
+        });
+    }
+
+    function selectAutoQuality() {
+        playback.list = playableCandidates.slice();
+        setQualityLabel('自動');
+        playCandidate(0, video.currentTime || 0);
+    }
+
+    function selectManualQuality(idx) {
+        const chosen = playableCandidates[idx];
+        if (!chosen) return;
+        // Chosen item first; the rest of the best-first list stays as fallback.
+        playback.list = [chosen].concat(playableCandidates.filter((_, i) => i !== idx));
+        setQualityLabel(candidateLabel(chosen));
+        playCandidate(0, video.currentTime || 0);
+    }
+
+    document.getElementById('qualityMenu').addEventListener('click', (e) => {
+        const item = e.target.closest('.yt-dropdown-item');
+        if (!item) return;
+        if (item.dataset.auto) {
+            markQualitySelected(item);
+            selectAutoQuality();
+        } else {
+            markQualitySelected(item);
+            selectManualQuality(Number(item.dataset.idx));
+        }
+        closeDropdown('qualitySelect');
+    });
+
+    function closeDropdown(id) { document.getElementById(id).classList.remove('open'); }
+
+    function toggleQualityDropdown(e) {
+        e.stopPropagation();
+        document.getElementById('qualitySelect').classList.toggle('open');
+        closeDropdown('apiInfoSelect');
+    }
+
+    function toggleApiInfoDropdown(e) {
+        e.stopPropagation();
+        document.getElementById('apiInfoSelect').classList.toggle('open');
+        closeDropdown('qualitySelect');
+    }
+
+    function openQualityDropdownFromCp() {
+        toggleControlPanel(false);
+        document.getElementById('qualitySelect').classList.add('open');
+    }
+
+    // ---------- Source modes (stream / embeds) ----------
+    function selectSourceMode(mode, opts) {
+        const options = opts || {};
+        document.querySelectorAll('.cp-mode-card').forEach((card) => card.classList.remove('selected'));
+        const card = document.getElementById(`cp-mode-card-${mode}`);
+        if (card) card.classList.add('selected');
+        const radio = document.getElementById(`cp-src-${mode}`);
+        if (radio) radio.checked = true;
+        if (options.persist !== false) lsSet('pref_embed_mode', mode);
+        setExternalSource(mode, options);
+    }
+
+    function nocookieEmbedUrl() {
+        if (NOCOOKIE_BASE) return NOCOOKIE_BASE.replace(/\/+$/, '') + '?autoplay=1';
+        return 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(videoId) + '?autoplay=1';
+    }
+
+    function setExternalSource(mode, opts) {
+        const silent = !!(opts && opts.silent);
+        if (mode === 'stream') {
+            hideIframe();
+            hidePlayerError();
+            if (!playback.list.length) playback.list = playableCandidates.slice();
+            if (playback.broken || playback.index < 0) {
+                playCandidate(0, 0);
+            } else {
+                safePlay(video);
+            }
+            if (!silent) showAlert('Stream 再生に切り替えました', 1500);
+            return;
+        }
+
+        // Embed modes: pause our player, keep its source so switching back resumes.
+        video.pause();
+        audio.pause();
+        hidePlayerError();
+        setLoading(false);
+        video.style.display = 'none';
+
+        let embedUrl;
+        if (mode === 'nocookie') {
+            embedUrl = nocookieEmbedUrl();
+            if (!silent) showAlert('YouTube NoCookie で再生中...', 1500);
+        } else {
+            embedUrl = 'https://www.youtube.com/embed/' + encodeURIComponent(videoId) + '?autoplay=1';
+            if (!silent) showAlert('YouTube Education で再生中...', 1500);
+        }
+        const iframe = document.createElement('iframe');
+        iframe.src = embedUrl;
+        iframe.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
+        iframe.allowFullscreen = true;
+        iframe.title = 'YouTube プレーヤー';
+        iframeContainer.replaceChildren(iframe);
+        iframeContainer.style.display = 'block';
+    }
+
+    function retryPlayback() {
+        hidePlayerError();
+        playback.refreshed = false;
+        playback.list = playableCandidates.slice();
+        playCandidate(0, 0);
+    }
+
+    // ---------- Sub-controls ----------
+    function toggleLoopSwitch(checked) {
+        video.loop = checked;
+        audio.loop = checked;
+        showAlert(checked ? 'ループ再生をONにしました' : 'ループ再生をOFFにしました', 1500);
+    }
+
+    function toggleMuteSwitch(checked) {
+        video.muted = checked;
+        audio.muted = checked;
+        showAlert(checked ? 'ミュートにしました' : 'ミュートを解除しました', 1500);
+    }
+
+    function toggleControlPanel(force) {
+        const panel = document.getElementById('controlPanel');
+        const open = typeof force === 'boolean' ? force : !panel.classList.contains('open');
+        panel.classList.toggle('open', open);
+        document.querySelector('.yt-control-trigger').setAttribute('aria-expanded', String(open));
+    }
+
+    function switchCpTab(idx) {
+        document.querySelectorAll('.cp-tab').forEach((tab, i) => tab.classList.toggle('active', i === idx));
+        document.getElementById('cpSlideTrack').style.transform = `translateX(-${idx * 100}%)`;
+    }
+
+    function applyApiChange(param, value, label) {
+        if (!value) {
+            showAlert(`${label}を自動選択に設定しました`, 1500);
+            return;
+        }
+        const url = new URL(window.location.href);
+        url.searchParams.set(param, value);
+        showAlert(`${label}を「${value.toUpperCase()}」に変更します...`, 1500);
+        setTimeout(() => { window.location.href = url.toString(); }, 500);
+    }
+    function applyStreamApiChange(apiId) { applyApiChange('stream_api', apiId, 'ストリームAPI'); }
+    function applyInfoApiChange(apiId) { applyApiChange('info_api', apiId, '情報取得API'); }
+
+    function openModal() { document.getElementById('dl-modal').style.display = 'flex'; }
+    function closeModal() { document.getElementById('dl-modal').style.display = 'none'; }
+
+    function closePlaylist() {
+        const panel = document.getElementById('playlist-panel');
+        if (panel) panel.style.display = 'none';
+    }
+
+    // ---------- Description ----------
+    function toggleDescription() {
+        const container = document.getElementById('description-container');
+        const btn = document.getElementById('desc-toggle-btn');
+        const collapsed = container.classList.toggle('collapsed');
+        btn.textContent = collapsed ? '...もっと見る' : '一部を表示';
+        btn.setAttribute('aria-expanded', String(!collapsed));
+    }
+
+    // ---------- Subscribe and history ----------
+    function readSubscriptions() {
+        try {
+            const v = JSON.parse(lsGet('subscribed_channels') || '[]');
+            return Array.isArray(v) ? v : [];
+        } catch (e) { return []; }
+    }
+
+    function updateSubscribeState(isSubscribed) {
+        const btn = document.getElementById('subscribe-btn');
+        if (!btn) return;
+        btn.textContent = isSubscribed ? '登録済み' : 'チャンネル登録';
+        btn.classList.toggle('is-subscribed', isSubscribed);
+        btn.setAttribute('aria-pressed', String(isSubscribed));
+    }
+
+    function toggleSubscribe(ucid) {
+        if (!ucid) return;
+        const subs = readSubscriptions();
+        const was = subs.includes(ucid);
+        const next = was ? subs.filter((id) => id !== ucid) : subs.concat([ucid]);
+        lsSet('subscribed_channels', JSON.stringify(next));
+        updateSubscribeState(!was);
+    }
 
     function saveWatchHistory() {
         if (!videoId) return;
-        if (localStorage.getItem('yt_pause_history') === 'true') return;
-
+        if (lsGet('yt_pause_history') === 'true') return;
         let history = [];
-
         try {
-            history = JSON.parse(localStorage.getItem('yt_watch_history') || '[]');
-            if (!Array.isArray(history)) history = [];
-        } catch (e) {
-            history = [];
-        }
-
-        history = history.filter(item => item && item.videoId !== videoId);
+            const parsed = JSON.parse(lsGet('yt_watch_history') || '[]');
+            history = Array.isArray(parsed) ? parsed : [];
+        } catch (e) { history = []; }
+        history = history.filter((item) => item && item.videoId !== videoId);
 
         const titleText = {% if video_title %}{{ video_title|tojson }}{% else %}document.getElementById('video-title')?.innerText?.trim() || ''{% endif %};
         const authorText = {% if author %}{{ author|tojson }}{% else %}document.querySelector('.yt-channel-name')?.innerText?.trim() || ''{% endif %};
@@ -1213,108 +1436,149 @@
             author: authorText || '',
             added_at: new Date().toLocaleString('ja-JP')
         });
-
-        localStorage.setItem('yt_watch_history', JSON.stringify(history));
+        lsSet('yt_watch_history', JSON.stringify(history));
     }
 
-    function toggleSubscribe(ucid) {
-        if (!ucid) return;
+    // ---------- Comments (JSON endpoint, plain-text rendering only) ----------
+    const commentList = document.getElementById('comment-list');
 
-        let subs = JSON.parse(
-            localStorage.getItem('subscribed_channels') || '[]'
-        );
+    function el(tag, className, text) {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined && text !== null) node.textContent = text;
+        return node;
+    }
 
-        const isSubscribed = subs.includes(ucid);
+    function safeImageUrl(u) {
+        return typeof u === 'string' && /^(https?:)?\/\//.test(u) ? u : '';
+    }
 
-        if (isSubscribed) {
-            subs = subs.filter(id => id !== ucid);
+    function hasCommentItems() { return !!commentList.querySelector('.yt-comment-item:not(.yt-comment-skeleton)'); }
+
+    function buildCommentNode(c) {
+        const item = el('article', 'yt-comment-item');
+        const author = typeof c.author === 'string' ? c.author : '';
+        const iconUrl = safeImageUrl(c.authorIcon);
+        if (iconUrl) {
+            const img = el('img', 'yt-comment-avatar');
+            img.src = iconUrl;
+            img.alt = '';
+            img.loading = 'lazy';
+            img.decoding = 'async';
+            img.addEventListener('error', () => { img.style.display = 'none'; });
+            item.appendChild(img);
         } else {
-            subs.push(ucid);
+            const fallback = el('span', 'yt-comment-avatar yt-comment-avatar-fallback', author.trim().charAt(0) || '?');
+            fallback.setAttribute('aria-hidden', 'true');
+            item.appendChild(fallback);
         }
 
-        localStorage.setItem(
-            'subscribed_channels',
-            JSON.stringify(subs)
-        );
+        const body = el('div', 'yt-comment-body');
+        const meta = el('div', 'yt-comment-meta');
+        meta.appendChild(el('span', 'yt-comment-author', author || '匿名'));
+        meta.appendChild(el('span', 'yt-comment-time', c.publishedText || ''));
+        body.appendChild(meta);
+        body.appendChild(el('div', 'yt-comment-text', String(c.content || '').trim()));
 
-        updateSubscribeState(!isSubscribed);
+        const likes = Number(c.likeCount) || 0;
+        const replies = Number(c.replyCount) || 0;
+        if (likes > 0 || replies > 0) {
+            const foot = el('div', 'yt-comment-foot');
+            if (likes > 0) {
+                const s = el('span');
+                const icon = el('i');
+                icon.className = 'far fa-thumbs-up';
+                s.appendChild(icon);
+                s.append(' ' + likes.toLocaleString('ja-JP'));
+                foot.appendChild(s);
+            }
+            if (replies > 0) foot.appendChild(el('span', '', `返信 ${replies.toLocaleString('ja-JP')}件`));
+            body.appendChild(foot);
+        }
+        item.appendChild(body);
+        return item;
     }
 
-    function updateSubscribeState(isSubscribed) {
-        const btn = document.getElementById('subscribe-btn');
-        if (!btn) return;
-        if (isSubscribed) {
-            btn.innerText = '登録済み';
-            btn.style.backgroundColor = 'var(--yt-spec-badge-chip-background)';
-            btn.style.color = 'var(--yt-spec-text-primary)';
-        } else {
-            btn.innerText = 'チャンネル登録';
-            btn.style.backgroundColor = 'var(--yt-spec-brand-subscribe-bg)';
-            btn.style.color = 'var(--yt-spec-brand-subscribe-text)';
+    function renderCommentSkeleton() {
+        const nodes = [];
+        for (let i = 0; i < 3; i++) {
+            const item = el('div', 'yt-comment-item yt-comment-skeleton');
+            item.appendChild(el('div', 'skeleton-box yt-comment-skel-avatar'));
+            const body = el('div', 'yt-comment-body');
+            body.appendChild(el('div', 'skeleton-box skeleton-text', ''));
+            body.firstChild.style.width = '120px';
+            const line = el('div', 'skeleton-box skeleton-text', '');
+            line.style.width = '80%';
+            body.appendChild(line);
+            item.appendChild(body);
+            nodes.push(item);
+        }
+        commentList.replaceChildren(...nodes);
+    }
+
+    function renderCommentMessage(text, withRetry) {
+        const box = el('div', 'yt-comment-state');
+        box.appendChild(el('p', '', text));
+        if (withRetry) {
+            const btn = el('button', 'yt-pill-button', '再試行');
+            btn.type = 'button';
+            btn.addEventListener('click', loadComments);
+            box.appendChild(btn);
+        }
+        commentList.replaceChildren(box);
+    }
+
+    function renderComments(list) {
+        if (!list.length) {
+            renderCommentMessage('コメントはありません（または無効です）', false);
+            return;
+        }
+        commentList.replaceChildren(...list.map(buildCommentNode));
+    }
+
+    async function loadComments() {
+        commentList.setAttribute('aria-busy', 'true');
+        if (!hasCommentItems()) renderCommentSkeleton();
+        try {
+            const data = await fetchJson(`/api/comments/${encodeURIComponent(videoId)}?sort=top`, COMMENTS_TIMEOUT_MS);
+            const list = data && Array.isArray(data.comments) ? data.comments.filter((c) => c && typeof c === 'object') : [];
+            renderComments(list);
+        } catch (err) {
+            console.warn('[comments] load failed', err);
+            // Keep server-rendered comments if we already have them.
+            if (!hasCommentItems()) renderCommentMessage('コメントを読み込めませんでした', true);
+        } finally {
+            commentList.setAttribute('aria-busy', 'false');
         }
     }
 
-    function checkSubscribeStatus(ucic) {
-        if (!ucic) return;
-        const subs = JSON.parse(localStorage.getItem('subscribed_channels') || '[]');
-        updateSubscribeState(subs.includes(ucic));
-    }
-
-    function closePlaylist() {
-        const panel = document.getElementById('playlist-panel');
-        if (panel) {
-            panel.style.display = 'none';
-        }
-    }
-
-    video.addEventListener('play', () => { if (audio.src) audio.play(); });
-    video.addEventListener('pause', () => { if (audio.src) audio.pause(); });
-    video.addEventListener('seeking', () => { if (audio.src) audio.currentTime = video.currentTime; });
-    video.addEventListener('ratechange', () => { if (audio.src) audio.playbackRate = video.playbackRate; });
-
-    function openModal() { document.getElementById('dl-modal').style.display = 'flex'; }
-    function closeModal() { document.getElementById('dl-modal').style.display = 'none'; }
-
+    // ---------- Status toast ----------
     let alertTimeout = null;
 
     function showAlert(text, duration = 3000, isError = false) {
-        const el = document.getElementById('custom-alert');
+        const el2 = document.getElementById('custom-alert');
         const icon = document.getElementById('alert-icon');
-        document.getElementById('alert-text').innerText = text;
-
-        if (isError) {
-            el.classList.add('error');
-            icon.className = 'fas fa-exclamation-circle';
-            icon.style.color = '#ff4d4d';
-        } else {
-            el.classList.remove('error');
-            icon.className = 'fas fa-info-circle';
-            icon.style.color = '#4caf50';
-        }
-
-        el.style.transform = '';
-        el.style.opacity = '';
-        el.classList.remove('hiding');
-        el.classList.add('show');
-
+        document.getElementById('alert-text').textContent = text;
+        el2.classList.toggle('error', !!isError);
+        icon.className = isError ? 'fas fa-exclamation-circle' : 'fas fa-info-circle';
+        el2.style.transform = '';
+        el2.style.opacity = '';
+        el2.classList.remove('hiding');
+        el2.classList.add('show');
         if (alertTimeout) clearTimeout(alertTimeout);
-        alertTimeout = setTimeout(() => {
-            hideAlert();
-        }, duration);
+        alertTimeout = setTimeout(hideAlert, duration);
     }
 
     function hideAlert() {
-        const el = document.getElementById('custom-alert');
-        if (!el.classList.contains('show')) return;
-        el.classList.remove('show');
-        el.classList.add('hiding');
-        setTimeout(() => {
-            el.classList.remove('hiding');
-        }, 300);
+        const el2 = document.getElementById('custom-alert');
+        if (!el2.classList.contains('show')) return;
+        el2.classList.remove('show');
+        el2.classList.add('hiding');
+        setTimeout(() => el2.classList.remove('hiding'), 300);
     }
 
     (function initSwipeableAlert() {
-        const el = document.getElementById('custom-alert');
+        const el2 = document.getElementById('custom-alert');
         let startX = 0;
         let currentX = 0;
         let isDragging = false;
@@ -1322,64 +1586,73 @@
         function onStart(e) {
             isDragging = true;
             startX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
-            el.classList.add('swiping');
+            el2.classList.add('swiping');
             if (alertTimeout) clearTimeout(alertTimeout);
         }
-
         function onMove(e) {
             if (!isDragging) return;
             currentX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
             const diffX = currentX - startX;
-            el.style.transform = `translateX(${diffX}px)`;
-            el.style.opacity = 1 - Math.abs(diffX) / 200;
+            el2.style.transform = `translateX(${diffX}px)`;
+            el2.style.opacity = 1 - Math.abs(diffX) / 200;
         }
-
         function onEnd() {
             if (!isDragging) return;
             isDragging = false;
-            el.classList.remove('swiping');
+            el2.classList.remove('swiping');
             const diffX = currentX - startX;
             if (Math.abs(diffX) > 80) {
-                const flyOutX = diffX > 0 ? 300 : -300;
-                el.style.transform = `translateX(${flyOutX}px)`;
-                el.style.opacity = '0';
-                setTimeout(() => {
-                    hideAlert();
-                }, 200);
+                el2.style.transform = `translateX(${diffX > 0 ? 300 : -300}px)`;
+                el2.style.opacity = '0';
+                setTimeout(hideAlert, 200);
             } else {
-                el.style.transform = '';
-                el.style.opacity = '';
+                el2.style.transform = '';
+                el2.style.opacity = '';
             }
         }
 
-        el.addEventListener('touchstart', onStart, { passive: true });
-        el.addEventListener('touchmove', onMove, { passive: true });
-        el.addEventListener('touchend', onEnd);
-
-        el.addEventListener('mousedown', onStart);
+        el2.addEventListener('touchstart', onStart, { passive: true });
+        el2.addEventListener('touchmove', onMove, { passive: true });
+        el2.addEventListener('touchend', onEnd);
+        el2.addEventListener('mousedown', onStart);
         window.addEventListener('mousemove', onMove);
         window.addEventListener('mouseup', onEnd);
     })();
 
-    function toggleDescription() {
-        const container = document.getElementById('description-container');
-        const btn = document.getElementById('desc-toggle-btn');
-        if (container.classList.contains('collapsed')) {
-            container.classList.remove('collapsed');
-            btn.innerText = '一部を表示';
-        } else {
-            container.classList.add('collapsed');
-            btn.innerText = '...もっと見る';
+    // ---------- Global close behaviour (one listener) ----------
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('#qualitySelect')) closeDropdown('qualitySelect');
+        if (!e.target.closest('#apiInfoSelect')) closeDropdown('apiInfoSelect');
+        const panel = document.getElementById('controlPanel');
+        const trigger = document.querySelector('.yt-control-trigger');
+        if (panel.classList.contains('open') && !panel.contains(e.target) && !trigger.contains(e.target)) {
+            toggleControlPanel(false);
         }
-    }
+    });
 
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        closeModal();
+        toggleControlPanel(false);
+        closeDropdown('qualitySelect');
+        closeDropdown('apiInfoSelect');
+    });
+
+    document.getElementById('dl-modal').addEventListener('click', (e) => {
+        if (e.target.id === 'dl-modal') closeModal();
+    });
+
+    document.getElementById('subscribe-btn').addEventListener('click', () => {
+        toggleSubscribe(document.getElementById('subscribe-btn').dataset.ucid);
+    });
+
+    // ---------- Info/stream API labels ----------
     function updateApiDisplay() {
         const infoApiMap = {
             'invidious': { name: 'Invidious', timeout: '4.0s' },
             'sia': { name: 'Sia Tube', timeout: '3.0s' },
             'sennin': { name: 'Sennin', timeout: '4.0s' }
         };
-
         const streamApiMap = {
             'sia': { name: 'Sia Tube', timeout: '2.5s' },
             'piped': { name: 'Piped', timeout: '2.5s' },
@@ -1388,224 +1661,31 @@
             'invidious': { name: 'Invidious', timeout: '4.0s' },
             'sennin': { name: 'Sennin', timeout: '3.5s' }
         };
-
         const infoApi = infoApiUsed || 'invidious';
         const streamApi = streamApiUsed || 'sia';
-
         const infoData = infoApiMap[infoApi] || { name: infoApi.toUpperCase(), timeout: '?' };
         const streamData = streamApiMap[streamApi] || { name: streamApi.toUpperCase(), timeout: '?' };
 
-        document.getElementById('infoApiDisplay').innerText = `${infoApi} - ${infoData.name}`;
-        document.getElementById('infoApiStatusDisplay').innerText = `タイムアウト: ${infoData.timeout}`;
-        document.getElementById('current-info-api-name').innerText = infoApi.toUpperCase();
-
-        document.getElementById('streamApiDisplay').innerText = `${streamApi} - ${streamData.name}`;
-        document.getElementById('streamApiStatusDisplay').innerText = `タイムアウト: ${streamData.timeout}`;
-        document.getElementById('current-stream-api-name').innerText = streamApi.toUpperCase();
-
-        const apiLabel = `API: ${infoApi.substring(0, 3).toUpperCase()} / ${streamApi.substring(0, 3).toUpperCase()}`;
-        document.getElementById('apiInfoLabel').innerText = apiLabel;
+        document.getElementById('infoApiDisplay').textContent = `${infoApi} - ${infoData.name}`;
+        document.getElementById('infoApiStatusDisplay').textContent = `タイムアウト: ${infoData.timeout}`;
+        document.getElementById('current-info-api-name').textContent = infoApi.toUpperCase();
+        document.getElementById('streamApiDisplay').textContent = `${streamApi} - ${streamData.name}`;
+        document.getElementById('streamApiStatusDisplay').textContent = `タイムアウト: ${streamData.timeout}`;
+        document.getElementById('current-stream-api-name').textContent = streamApi.toUpperCase();
+        document.getElementById('apiInfoLabel').textContent = `API: ${infoApi.substring(0, 3).toUpperCase()} / ${streamApi.substring(0, 3).toUpperCase()}`;
     }
 
-    function toggleQualityDropdown(e) {
-        e.stopPropagation();
-        document.getElementById('qualitySelect').classList.toggle('open');
-        document.getElementById('apiInfoSelect').classList.remove('open');
-    }
-
-    function toggleApiInfoDropdown(e) {
-        e.stopPropagation();
-        document.getElementById('apiInfoSelect').classList.toggle('open');
-        document.getElementById('qualitySelect').classList.remove('open');
-    }
-
-    document.addEventListener('click', (e) => {
-        if (!e.target.closest('#qualitySelect')) {
-            document.getElementById('qualitySelect').classList.remove('open');
-        }
-        if (!e.target.closest('#apiInfoSelect')) {
-            document.getElementById('apiInfoSelect').classList.remove('open');
-        }
-        const panel = document.getElementById('controlPanel');
-        const trigger = document.querySelector('.yt-control-trigger');
-        if (panel.classList.contains('open') && !panel.contains(e.target) && !trigger.contains(e.target)) {
-            toggleControlPanel();
-        }
-    });
-
-    document.querySelectorAll('#qualitySelect .yt-dropdown-item').forEach(item => {
-        item.addEventListener('click', function() {
-            document.querySelectorAll('#qualitySelect .yt-dropdown-item').forEach(i => i.classList.remove('selected'));
-            this.classList.add('selected');
-
-            const videoUrl = this.getAttribute('data-value');
-            const audioUrl = this.getAttribute('data-audio');
-            const type = this.getAttribute('data-type');
-
-            const qualityText = "画質: " + this.innerText.trim();
-            document.getElementById('qualityLabel').innerText = qualityText;
-            document.getElementById('cpCurrentQualityText').innerText = this.innerText.trim();
-            changeSource(videoUrl, audioUrl, type);
-        });
-    });
-
-    function changeSource(vUrl, aUrl, type) {
-        if (hlsInstance) {
-            hlsInstance.destroy();
-            hlsInstance = null;
-        }
-
-        iframeContainer.style.display = 'none';
-        iframeContainer.innerHTML = '';
-        video.style.display = 'block';
-
-        if (type === 'm3u8') {
-            if (Hls.isSupported()) {
-                hlsInstance = new Hls();
-                hlsInstance.loadSource(vUrl);
-                hlsInstance.attachMedia(video);
-            } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-                video.src = vUrl;
-            }
-            audio.removeAttribute('src');
-            showAlert('HLS (m3u8) で再生中...', 2000);
-        } else {
-            video.src = vUrl;
-            if (aUrl) {
-                audio.src = aUrl;
-                audio.currentTime = video.currentTime;
-            } else {
-                audio.removeAttribute('src');
-            }
-            showAlert('画質を変更しました', 1500);
-        }
-        video.play();
-    }
-
-        document.addEventListener('click', (e) => {
-        if (!e.target.closest('#qualitySelect')) {
-            document.getElementById('qualitySelect').classList.remove('open');
-        }
-        if (!e.target.closest('#apiInfoSelect')) {
-            document.getElementById('apiInfoSelect').classList.remove('open');
-        }
-        const panel = document.getElementById('controlPanel');
-        const trigger = document.querySelector('.yt-control-trigger');
-        if (panel.classList.contains('open') && !panel.contains(e.target) && !trigger.contains(e.target)) {
-            toggleControlPanel();
-        }
-    });
-
-    function toggleControlPanel() {
-        const panel = document.getElementById('controlPanel');
-        panel.classList.toggle('open');
-    }
-
-    function switchCpTab(idx) {
-        const tabs = document.querySelectorAll('.cp-tab');
-        tabs.forEach((tab, i) => {
-            tab.classList.toggle('active', i === idx);
-        });
-        const track = document.getElementById('cpSlideTrack');
-        track.style.transform = `translateX(-${idx * 100}%)`;
-    }
-
-    function toggleLoopSwitch(checked) {
-        video.loop = checked;
-        showAlert(video.loop ? "ループ再生をONにしました" : "ループ再生をOFFにしました", 1500);
-    }
-
-    function toggleMuteSwitch(checked) {
-        video.muted = checked;
-        audio.muted = checked;
-        showAlert(video.muted ? "ミュートにしました" : "ミュートを解除しました", 1500);
-    }
-
-    function openQualityDropdownFromCp() {
-        toggleControlPanel();
-        document.getElementById('qualitySelect').classList.add('open');
-    }
-
-    function selectSourceMode(mode) {
-        document.querySelectorAll('.cp-mode-card').forEach(card => card.classList.remove('selected'));
-        const selectedCard = document.getElementById(`cp-mode-card-${mode}`);
-        if (selectedCard) selectedCard.classList.add('selected');
-
-        const radio = document.getElementById(`cp-src-${mode}`);
-        if (radio) radio.checked = true;
-
-        localStorage.setItem('pref_embed_mode', mode);
-        setExternalSource(mode);
-    }
-
-    function setExternalSource(mode) {
-        if (mode === 'stream') {
-            iframeContainer.style.display = 'none';
-            iframeContainer.innerHTML = '';
-            video.style.display = 'block';
-            video.play();
-            showAlert('Stream 再生に切り替えました', 1500);
-        } else {
-            video.pause();
-            video.style.display = 'none';
-            audio.removeAttribute('src');
-            iframeContainer.style.display = 'block';
-
-            let embedUrl = "";
-            if (mode === 'nocookie') {
-                embedUrl = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1`;
-                showAlert('YouTube NoCookie で再生中...', 1500);
-            } else if (mode === 'edu') {
-                embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1`;
-                showAlert('YouTube Education で再生中...', 1500);
-            }
-            iframeContainer.innerHTML = `<iframe src="${embedUrl}" allow="autoplay; encrypted-media" allowfullscreen style="width:100%; height:100%; border:none;"></iframe>`;
-        }
-    }
-
-    function applyStreamApiChange(apiId) {
-        if (!apiId) {
-            showAlert('ストリームAPIを自動選択に設定しました', 1500);
-            return;
-        }
-
-        const currentUrl = new URL(window.location.href);
-        currentUrl.searchParams.set('stream_api', apiId);
-
-        showAlert(`ストリームAPIを「${apiId.toUpperCase()}」に変更します...`, 1500);
-
-        setTimeout(() => {
-            window.location.href = currentUrl.toString();
-        }, 500);
-    }
-
-    function applyInfoApiChange(apiId) {
-        if (!apiId) {
-            showAlert('情報取得APIを自動選択に設定しました', 1500);
-            return;
-        }
-
-        const currentUrl = new URL(window.location.href);
-        currentUrl.searchParams.set('info_api', apiId);
-
-        showAlert(`情報取得APIを「${apiId.toUpperCase()}」に変更します...`, 1500);
-
-        setTimeout(() => {
-            window.location.href = currentUrl.toString();
-        }, 500);
-    }
+    // ---------- Init ----------
+    setCandidates(SERVER_STREAMS, SERVER_VIDEO_URLS);
+    setQualityLabel('自動');
+    loadComments();
 
     document.addEventListener('DOMContentLoaded', () => {
-        const floatingControl = document.getElementById('floating-control');
-        const controlPanel = document.getElementById('controlPanel');
-
-        if (floatingControl) {
-            document.body.appendChild(floatingControl);
-        }
-
-        if (controlPanel) {
-            document.body.appendChild(controlPanel);
-        }
+        // Move fixed overlays to <body> so their position is relative to the viewport.
+        ['floating-control', 'controlPanel'].forEach((id) => {
+            const node = document.getElementById(id);
+            if (node) document.body.appendChild(node);
+        });
 
         const urlParams = new URLSearchParams(window.location.search);
         const currentInfoApi = urlParams.get('info_api') || infoApiUsed || '';
@@ -1613,50 +1693,26 @@
 
         checkSubscribeStatus(authorId);
 
-        const streamSelect = document.getElementById('cpStreamApiSelect');
-        if (streamSelect) streamSelect.value = currentStreamApi || '';
-
-        const infoSelect = document.getElementById('cpInfoApiSelect');
-        if (infoSelect) infoSelect.value = currentInfoApi || '';
-
+        document.getElementById('cpStreamApiSelect').value = currentStreamApi;
+        document.getElementById('cpInfoApiSelect').value = currentInfoApi;
         document.getElementById('cpLoopToggle').checked = video.loop;
         document.getElementById('cpMuteToggle').checked = video.muted;
 
-        const preferredEmbedMode = localStorage.getItem('pref_embed_mode') || 'stream';
-        selectSourceMode(preferredEmbedMode);
+        // Restore the saved mode. Stream mode starts playback; embeds replace it.
+        const preferredEmbedMode = lsGet('pref_embed_mode') || 'stream';
+        selectSourceMode(preferredEmbedMode, { silent: true, persist: false });
 
         updateApiDisplay();
-
-        const thumbs = document.querySelectorAll('.yt-recommend-thumb');
-        thumbs.forEach(thumb => {
-            thumb.loading = 'lazy';
-        });
-
         saveWatchHistory();
     });
 
-    if ('IntersectionObserver' in window) {
-        const observer = new IntersectionObserver((entries) => {
-            entries.forEach(entry => {
-                if (entry.isIntersecting && entry.target.tagName === 'IMG') {
-                    const img = entry.target;
-                    if (img.dataset.src) {
-                        img.src = img.dataset.src;
-                        img.removeAttribute('data-src');
-                        observer.unobserve(img);
-                    }
-                }
-            });
-        });
-
-        document.querySelectorAll('img[data-src]').forEach(img => observer.observe(img));
+    function checkSubscribeStatus(ucid) {
+        if (!ucid) return;
+        updateSubscribeState(readSubscriptions().includes(ucid));
     }
 
     window.addEventListener('beforeunload', () => {
-        if (hlsInstance) {
-            hlsInstance.destroy();
-        }
-        video.src = '';
-        audio.src = '';
+        stopMedia();
     });
-</script>  {% endblock %}
+</script>
+{% endblock %}

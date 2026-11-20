@@ -6,12 +6,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
 import json
-from datetime import datetime
+import os
+import time
+from fastapi.middleware.gzip import GZipMiddleware
 import random
 
 from app.search import router as search_router
 from app.video import router as video_router
-from app.stream import router as stream_router
 from app.channel import router as channel_router
 from app.short import router as short_router
 
@@ -27,33 +28,62 @@ SOURCES = {
     "Education - woolisbest4520-3": "https://raw.githubusercontent.com/wista-api-project/auto/refs/heads/main/edu/3.txt",
 }
 
+_EDU_SOURCE_CACHE: dict = {}
+_EDU_SOURCE_TTL = 600.0
+
+
+def _fetch_education_source(source_name: str, raw_url: str) -> str:
+    """教育用ソースは毎回取りに行かず、10分間キャッシュする(失敗時は直前の値を使う)。"""
+    now = time.time()
+    hit = _EDU_SOURCE_CACHE.get(source_name)
+    if hit and now - hit["time"] < _EDU_SOURCE_TTL:
+        return hit["value"]
+
+    try:
+        response = requests.get(raw_url, timeout=6)
+        response.raise_for_status()
+        if source_name.startswith("Education - Toka_Kun"):
+            value = str(response.json().get("result", ""))
+        elif source_name == "Education - siawaseok":
+            value = str(response.json().get("params", ""))
+        else:
+            value = response.text.strip()
+    except Exception:
+        if hit:
+            return hit["value"]
+        raise
+
+    _EDU_SOURCE_CACHE[source_name] = {"value": value, "time": now}
+    return value
+
+
 def get_education_embed_url(video_id: str, source_name: str) -> str:
     if source_name not in SOURCES:
         raise ValueError(f"未知のソース名です: {source_name}")
 
-    raw_url = SOURCES[source_name]
-
-    response = requests.get(raw_url, timeout=10)
-    response.raise_for_status()
-
-    params = ""
-
-    if source_name.startswith("Education - Toka_Kun"):
-        data = response.json()
-        params = data.get("result", "")
-    elif source_name == "Education - siawaseok":
-        data = response.json()
-        params = data.get("params", "")
-    else:
-        
-        params = response.text.strip()
+    params = _fetch_education_source(source_name, SOURCES[source_name])
 
     embed_url = f"https://www.youtubeeducation.com/embed/{video_id}{params}"
     return embed_url
 
 app = FastAPI()
 
+class SelectiveGZipMiddleware(GZipMiddleware):
+    """HTML/JSON だけ圧縮する。動画・画像の中継は圧縮すると Range 応答が壊れる/CPUを浪費するので除外。"""
 
+    _SKIP_PREFIXES = ("/proxy/", "/thumbnail", "/img/")
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and scope.get("path", "").startswith(self._SKIP_PREFIXES):
+            await self.app(scope, receive, send)
+            return
+        await super().__call__(scope, receive, send)
+
+
+app.add_middleware(SelectiveGZipMiddleware, minimum_size=1024)
+
+# 静的ファイル用ディレクトリは無くても起動できるように作っておく
+os.makedirs("img", exist_ok=True)
 app.mount("/img", StaticFiles(directory="img"), name="img")
 
 templates = Jinja2Templates(directory="templates")
@@ -61,7 +91,6 @@ templates.env.add_extension("jinja2.ext.do")
 
 app.include_router(search_router)
 app.include_router(video_router)
-app.include_router(stream_router)
 app.include_router(channel_router)
 app.include_router(short_router)
 
@@ -236,8 +265,13 @@ async def proxy_thumb(v: str):
 
     content = await fetch_with_inflight(cache_key, _do_fetch, ttl=1800.0)
     if content:
-        return Response(content=content, media_type="image/jpeg")
-    return Response(status_code=404)
+        # サムネイルはブラウザ側でも長く保持させる(同じ動画一覧を何度も開く想定)
+        return Response(
+            content=content,
+            media_type="image/jpeg",
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+    return Response(status_code=404, headers={"Cache-Control": "public, max-age=300"})
 
 
 @app.get("/thumbnail")

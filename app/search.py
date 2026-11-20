@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import json
+import random
 import time
 import httpx
 import logging
@@ -113,7 +114,11 @@ async def fetch_with_inflight(
     ttl: float = 180.0,
     retry_count: int = 3,
 ) -> Optional[Any]:
-    """インフライト重複排除付きフェッチ"""
+    """キャッシュ + 同一キーの同時取得を1本にまとめる(インフライト重複排除).
+
+    - ロックは状態の確認・登録だけに使い、通信中は保持しない(以前は待機中もロックを握り、全リクエストが直列化していた)
+    - 例外・タイムアウトのときだけリトライし、None(=該当なし)は即座に返す
+    """
     cached = get_cache(key)
     if cached is not None:
         return cached
@@ -122,74 +127,94 @@ async def fetch_with_inflight(
         cached = get_cache(key)
         if cached is not None:
             return cached
-        
-        if key in _INFLIGHT:
-            fut = _INFLIGHT[key]
+        fut = _INFLIGHT.get(key)
+        is_owner = fut is None
+        if is_owner:
+            fut = asyncio.get_running_loop().create_future()
+            _INFLIGHT[key] = fut
+
+    if not is_owner:
+        try:
+            return await asyncio.wait_for(asyncio.shield(fut), timeout=30.0)
+        except Exception:
+            return None
+
+    result: Optional[Any] = None
+    try:
+        for attempt in range(max(1, retry_count)):
             try:
-                return await asyncio.wait_for(asyncio.shield(fut), timeout=30.0)
-            except asyncio.TimeoutError:
-                logger.warning(f"Inflight request timeout for key: {key}")
+                result = await asyncio.wait_for(fetch_func(), timeout=30.0)
+                break
+            except Exception as e:  # タイムアウト含む
+                logger.debug(f"fetch attempt {attempt + 1} failed for {key}: {e}")
+                result = None
+                if attempt < retry_count - 1:
+                    await asyncio.sleep(0.3 * (attempt + 1))
+        if result is not None:
+            set_cache(key, result, ttl=ttl)
+        return result
+    finally:
+        if not fut.done():
+            fut.set_result(result)
+        async with _CACHE_LOCK:
+            if _INFLIGHT.get(key) is fut:
                 _INFLIGHT.pop(key, None)
 
-        loop = asyncio.get_event_loop()
-        fut = loop.create_future()
-        _INFLIGHT[key] = fut
 
+async def race_first(
+    factories: List[Any],
+    accept,
+    timeout: float = 8.0,
+) -> Optional[Any]:
+    """複数の取得処理を並列に走らせ、`accept` を満たす最初の結果を返す.
+
+    以前の実装は「最初に終わったもの」が空・失敗だと残りを待たずに諦めていたため、
+    ここでは「条件を満たす最初の結果」を返す。勝者が決まったら残りはキャンセルする。
+    """
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    tasks = [asyncio.ensure_future(f()) for f in factories]
     try:
-        res = None
-        last_error = None
-        
-        for attempt in range(retry_count):
-            try:
-                res = await asyncio.wait_for(fetch_func(), timeout=30.0)
-                if res is not None:
-                    set_cache(key, res, ttl=ttl)
-                    if not fut.done():
-                        fut.set_result(res)
+        pending = set(tasks)
+        while pending:
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                break
+            done, pending = await asyncio.wait(
+                pending, timeout=remaining, return_when=asyncio.FIRST_COMPLETED
+            )
+            if not done:
+                break
+            for t in done:
+                if t.cancelled() or t.exception() is not None:
+                    continue
+                res = t.result()
+                if accept(res):
                     return res
-            except asyncio.TimeoutError as e:
-                last_error = e
-                if attempt < retry_count - 1:
-                    await asyncio.sleep(0.5 * (attempt + 1))
-                    continue
-            except Exception as e:
-                last_error = e
-                if attempt < retry_count - 1:
-                    await asyncio.sleep(0.5 * (attempt + 1))
-                    continue
-        
-        if not fut.done():
-            if last_error:
-                fut.set_exception(last_error)
-            else:
-                fut.set_result(None)
-        return res if res is not None else None
-        
-    except Exception as e:
-        logger.error(f"Fetch error for key {key}: {e}")
-        if not fut.done():
-            fut.set_exception(e)
-        raise
+        return None
     finally:
-        async with _CACHE_LOCK:
-            _INFLIGHT.pop(key, None)
+        for t in tasks:
+            if not t.done():
+                t.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
 
 async def get_invidious_instances_from_url(list_url: str) -> List[str]:
-    """URLからInvidious インスタンスリストを取得"""
+    """URLからInvidious インスタンスリストを取得.
+
+    失敗時もフォールバック一覧を短時間キャッシュし、毎リクエストでリトライ待ちが発生しないようにする。
+    """
     cache_key = f"inv_instances_list:{list_url}"
     cached = get_cache(cache_key)
     if cached:
         return cached
 
-    retry_count = 3
-    last_error = None
-    
-    for attempt in range(retry_count):
+    for attempt in range(2):
         try:
             resp = await asyncio.wait_for(
                 client_session.get(list_url, timeout=3.0),
-                timeout=5.0
+                timeout=4.0,
             )
             if resp.status_code == 200:
                 data = resp.json()
@@ -197,26 +222,22 @@ async def get_invidious_instances_from_url(list_url: str) -> List[str]:
                 if isinstance(data, list):
                     for item in data:
                         if isinstance(item, dict) and "instance" in item:
-                            inst = item["instance"].strip()
+                            inst = str(item["instance"]).strip()
                             if inst:
                                 instances.append(inst)
-                        elif isinstance(item, str):
-                            inst = item.strip()
-                            if inst:
-                                instances.append(inst)
-                
+                        elif isinstance(item, str) and item.strip():
+                            instances.append(item.strip())
                 if instances:
                     set_cache(cache_key, instances, ttl=600.0)
                     return instances
         except Exception as e:
-            last_error = e
             logger.debug(f"Attempt {attempt + 1} to fetch instances failed: {e}")
-            if attempt < retry_count - 1:
-                await asyncio.sleep(1.0 * (attempt + 1))
-            continue
+            if attempt == 0:
+                await asyncio.sleep(0.3)
 
     logger.warning(f"Failed to fetch instances from {list_url}, using fallback")
-    return FALLBACK_INVIDIOUS_INSTANCES
+    set_cache(cache_key, list(FALLBACK_INVIDIOUS_INSTANCES), ttl=120.0)
+    return list(FALLBACK_INVIDIOUS_INSTANCES)
 
 
 async def record_instance_health(instance: str, success: bool, response_time: float) -> None:
@@ -239,48 +260,18 @@ async def record_instance_health(instance: str, success: bool, response_time: fl
         health["last_checked"] = time.time()
 
 
-async def get_fastest_invidious_instance(
-    list_url: str = INVIDIOUS_VIDEO_LIST_URL,
-) -> str:
-    """最速のInvidious インスタンスを取得"""
-    cache_key = f"fastest_inv_instance:{list_url}"
-    cached = get_cache(cache_key)
-    if cached:
-        return cached
+def _rank_instances(instances: List[str]) -> List[str]:
+    """ネットワークを使わずに並びを決める(成功実績が多いものを先頭、同順位内はランダム)."""
+    shuffled = list(instances)
+    random.shuffle(shuffled)
 
-    base_instances = await get_invidious_instances_from_url(list_url)
-    if not base_instances:
-        return FALLBACK_INVIDIOUS_INSTANCES[0]
-    
-    target_instances = base_instances[:15]
+    def score(inst: str) -> int:
+        h = _INSTANCE_HEALTH.get(inst)
+        if not h or (h["success_count"] + h["failure_count"]) == 0:
+            return 1
+        return 0 if h["success_count"] >= h["failure_count"] else 2
 
-    async def ping_instance(instance: str) -> tuple:
-        start = time.time()
-        try:
-            url = f"{instance.rstrip('/')}/api/v1/stats"
-            resp = await asyncio.wait_for(
-                client_session.get(url, timeout=2.0),
-                timeout=3.0
-            )
-            if resp.status_code == 200:
-                elapsed = time.time() - start
-                await record_instance_health(instance, True, elapsed)
-                return instance, elapsed
-        except Exception as e:
-            logger.debug(f"Ping failed for {instance}: {e}")
-            await record_instance_health(instance, False, 0)
-        return instance, float("inf")
-
-    tasks = [ping_instance(inst) for inst in target_instances]
-    results = await asyncio.gather(*tasks)
-
-    valid_results = [r for r in results if r[1] < float("inf")]
-    if valid_results:
-        fastest_instance = min(valid_results, key=lambda x: x[1])[0]
-        set_cache(cache_key, fastest_instance, ttl=300.0)
-        return fastest_instance
-
-    return base_instances[0] if base_instances else FALLBACK_INVIDIOUS_INSTANCES[0]
+    return sorted(shuffled, key=score)
 
 
 def _is_valid_invidious_response(res: Any) -> bool:
@@ -298,14 +289,49 @@ def _is_valid_invidious_response(res: Any) -> bool:
     return False
 
 
+async def _get_json_from_instance(
+    instance: str,
+    endpoint: str,
+    params: Optional[Dict[str, Any]],
+    timeout: float = 3.5,
+    retries: int = 2,
+) -> Optional[Any]:
+    """1インスタンスからJSONを取得。取得失敗・不正データは None。"""
+    url = f"{instance.rstrip('/')}/api/v1{endpoint}"
+    for attempt in range(max(1, retries)):
+        try:
+            resp = await asyncio.wait_for(
+                client_session.get(url, params=params, timeout=timeout),
+                timeout=timeout + 1.0,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            if _is_valid_invidious_response(data):
+                await record_instance_health(instance, True, 0)
+                return data
+            # 応答は届いたが中身が無効 → 同じインスタンスに再試行しても無意味
+            await record_instance_health(instance, False, 0)
+            return None
+        except Exception as e:
+            logger.debug(f"Invidious {instance} attempt {attempt + 1} failed: {e}")
+            await record_instance_health(instance, False, 0)
+            if attempt < retries - 1:
+                await asyncio.sleep(0.2)
+    return None
+
+
 async def fetch_invidious(
     endpoint: str,
     params: Optional[Dict[str, Any]] = None,
     force_instance: Optional[str] = None,
     list_type: str = "video",
-    max_retries: int = 3,
+    max_retries: int = 2,
 ) -> Optional[Any]:
-    """Invidious APIからデータを取得（高可用性版）"""
+    """Invidious APIからデータを取得.
+
+    通常時は上位インスタンスへ並列リクエストし、最初に有効な応答を採用する。
+    以前は最速インスタンスを毎回15台 ping してから取得していたため、キャッシュミス時に数秒遅れていた。
+    """
     param_str = json.dumps(params, sort_keys=True) if params else ""
     cache_key = f"inv:{endpoint}:{param_str}:{force_instance or ''}:{list_type}"
 
@@ -316,130 +342,32 @@ async def fetch_invidious(
             else INVIDIOUS_VIDEO_LIST_URL
         )
         base_instances = await get_invidious_instances_from_url(list_url)
-
         if not base_instances:
             raise Exception("No Invidious instances available")
 
         if force_instance:
-            instances = [force_instance] + [
-                i for i in base_instances if i != force_instance
-            ]
-            last_error = None
-            
-            for instance in instances[:5]:  # 最大5インスタンスまで
-                for retry in range(max_retries):
-                    try:
-                        url = f"{instance.rstrip('/')}/api/v1{endpoint}"
-                        response = await asyncio.wait_for(
-                            client_session.get(url, params=params, timeout=4.0),
-                            timeout=6.0
-                        )
-                        response.raise_for_status()
-                        res_data = response.json()
-                        
-                        if _is_valid_invidious_response(res_data):
-                            await record_instance_health(instance, True, 0)
-                            return res_data
-                        else:
-                            logger.warning(f"Invalid response from {instance}: {res_data}")
-                            await record_instance_health(instance, False, 0)
-                    except Exception as e:
-                        logger.debug(f"Retry {retry + 1} failed for {instance}: {e}")
-                        last_error = e
-                        await record_instance_health(instance, False, 0)
-                        if retry < max_retries - 1:
-                            await asyncio.sleep(0.3 * (retry + 1))
-                        continue
-            
-            raise last_error if last_error else Exception("All instances failed")
-        
-        else:
-            # 最速インスタンスから並列フェッチ
-            fastest = await get_fastest_invidious_instance(list_url)
-            instances = [fastest] + [i for i in base_instances if i != fastest]
-            target_instances = instances[:10]  # 最大10個を並列で試す
+            ordered = [force_instance] + [i for i in base_instances if i != force_instance]
+            for inst in ordered[:4]:
+                data = await _get_json_from_instance(inst, endpoint, params, 4.0, max_retries)
+                if data is not None:
+                    return data
+            raise Exception("All instances failed (forced)")
 
-            async def task(instance: str) -> Optional[Any]:
-                for retry in range(2):
-                    try:
-                        url = f"{instance.rstrip('/')}/api/v1{endpoint}"
-                        resp = await asyncio.wait_for(
-                            client_session.get(url, params=params, timeout=3.5),
-                            timeout=5.0
-                        )
-                        resp.raise_for_status()
-                        res_data = resp.json()
-                        
-                        if _is_valid_invidious_response(res_data):
-                            await record_instance_health(instance, True, 0)
-                            return res_data
-                        else:
-                            logger.debug(f"Invalid response from {instance}")
-                    except Exception as e:
-                        logger.debug(f"Task failed for {instance} (retry {retry + 1}): {e}")
-                        await record_instance_health(instance, False, 0)
-                        if retry < 1:
-                            await asyncio.sleep(0.2)
-                
-                raise Exception(f"Failed to fetch from {instance}")
+        ordered = _rank_instances(base_instances)
+        factories = [
+            (lambda inst=inst: _get_json_from_instance(inst, endpoint, params, 3.5, max_retries))
+            for inst in ordered[:8]
+        ]
+        result = await race_first(factories, accept=_is_valid_invidious_response, timeout=8.0)
+        if result is not None:
+            return result
 
-            # 最初のタスクを並列実行
-            tasks = {asyncio.create_task(task(inst)): inst for inst in target_instances}
-            
-            while tasks:
-                done, pending = await asyncio.wait(
-                    tasks.keys(),
-                    return_when=asyncio.FIRST_COMPLETED,
-                    timeout=8.0
-                )
-                
-                for completed_task in done:
-                    try:
-                        res = await completed_task
-                        if _is_valid_invidious_response(res):
-                            # 他のタスクをキャンセル
-                            for t in pending:
-                                t.cancel()
-                                try:
-                                    await t
-                                except asyncio.CancelledError:
-                                    pass
-                            return res
-                    except Exception as e:
-                        logger.debug(f"Task failed: {e}")
-                
-                # タスク完了時に残りのタスクを削除
-                for t in done:
-                    tasks.pop(t, None)
-                
-                if not tasks and not done:
-                    break
-            
-            # 残りのインスタンスを順序で試す
-            remaining = [i for i in instances if i not in target_instances]
-            for inst in remaining[:5]:
-                for retry in range(2):
-                    try:
-                        url = f"{inst.rstrip('/')}/api/v1{endpoint}"
-                        response = await asyncio.wait_for(
-                            client_session.get(
-                                url, params=params, timeout=3.5
-                            ),
-                            timeout=5.0
-                        )
-                        response.raise_for_status()
-                        res_data = response.json()
-                        
-                        if _is_valid_invidious_response(res_data):
-                            await record_instance_health(inst, True, 0)
-                            return res_data
-                    except Exception as e:
-                        logger.debug(f"Remaining instance {inst} failed (retry {retry + 1}): {e}")
-                        await record_instance_health(inst, False, 0)
-                        if retry < 1:
-                            await asyncio.sleep(0.2)
-            
-            raise Exception("All Invidious instances failed")
+        # 並列で当たらなかった残りを順番に試す
+        for inst in ordered[8:12]:
+            data = await _get_json_from_instance(inst, endpoint, params, 3.5, 1)
+            if data is not None:
+                return data
+        raise Exception("All Invidious instances failed")
 
     return await fetch_with_inflight(cache_key, _do_fetch, ttl=180.0, retry_count=2)
 
